@@ -1,0 +1,381 @@
+<form version="1.1" theme="dark" stylesheet="dashboard_drawer.css">
+  <label>Enterprise STIG Compliance Dashboard</label>
+  <description>Executive STIG Compliance Monitoring for Enterprise Assets (Powered by results from NIWC Atlantic's SCAP Compliance Checker)</description>
+  <!-- Global Base Search (Optimized Raw Index Search for 100K Scale) -->
+  <search id="base_stig_eval">
+    <query>
+      `scap_index` event_type="scan_summary"
+      | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), 
+             target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), 
+             target_os_version=if(isnull(target_os_version) OR target_os_version=="", "Unknown", target_os_version),
+             target_os_family=if(isnull(target_os_family) OR target_os_family=="", "Unknown", target_os_family),
+             primary_ip=coalesce(primary_ip, ip, "N/A"), 
+             host_id=coalesce(host_id, smbios_uuid, host, "N/A"),
+             scan_id=coalesce(scan_id, "N/A"),
+             benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
+             rules_informational=coalesce(rules_informational, rules_info, cat4_fails, 0)
+      | search (profile_id="$mac_tok$" OR "$mac_tok$"="*") (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+      | stats latest(_time) as max_time, 
+              latest(benchmark_score) as score_clean, 
+              latest(rules_passed) as rules_passed,
+              latest(rules_failed) as rules_failed,
+              latest(rules_error) as rules_error,
+              latest(rules_not_checked) as rules_not_checked,
+              latest(rules_informational) as rules_informational,
+              latest(cat1_fails) as cat1_fails,
+              latest(cat2_fails) as cat2_fails,
+              latest(cat3_fails) as cat3_fails,
+              latest(cat4_fails) as cat4_fails,
+              latest(primary_ip) as primary_ip, 
+              latest(target_os) as target_os, 
+              latest(target_os_version) as target_os_version,
+              latest(target_os_family) as target_os_family,
+              latest(host_id) as host_id,
+              latest(scan_id) as scan_id,
+              latest(profile_id) as profile_id by host, benchmark_id
+    </query>
+    <earliest>$time_tok.earliest$</earliest>
+    <latest>$time_tok.latest$</latest>
+  </search>
+  <!-- Global Inputs -->
+  <fieldset submitButton="false">
+    <input type="time" token="time_tok" searchWhenChanged="true">
+      <label>Evaluation Timeframe</label>
+      <default>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="mac_tok" searchWhenChanged="true">
+      <label>Impact Profile (MAC)</label>
+      <choice value="*">All Profiles</choice>
+      <default>*</default>
+      <fieldForLabel>profile_id</fieldForLabel>
+      <fieldForValue>profile_id</fieldForValue>
+      <search>
+        <query>`scap_index` event_type="scan_summary" earliest=-30d@d | stats count by profile_id | fields profile_id</query>
+      </search>
+    </input>
+    <input type="dropdown" token="os_tok" searchWhenChanged="true">
+      <label>Target OS</label>
+      <choice value="*">All Operating Systems</choice>
+      <default>*</default>
+      <fieldForLabel>target_os</fieldForLabel>
+      <fieldForValue>target_os</fieldForValue>
+      <search>
+        <query>`scap_index` event_type="scan_summary" earliest=-30d@d | stats count by target_os | fields target_os</query>
+      </search>
+    </input>
+    <input type="dropdown" token="bench_tok" searchWhenChanged="true">
+      <label>STIG Benchmark</label>
+      <choice value="*">All Benchmarks</choice>
+      <default>*</default>
+      <fieldForLabel>benchmark_id</fieldForLabel>
+      <fieldForValue>benchmark_id</fieldForValue>
+      <search>
+        <query>`scap_index` event_type="scan_summary" earliest=-30d@d | stats count by benchmark_id | sort benchmark_id | fields benchmark_id</query>
+      </search>
+    </input>
+  </fieldset>
+  <!-- ROW 1: EXECUTIVE KPI SUMMARY -->
+  <row id="kpi_row">
+    <panel>
+      <single>
+        <title>Enterprise Compliance Score</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats avg(score_clean) as mean_score
+            | eval mean_score=round(mean_score, 1)
+            | fields mean_score
+          </query>
+        </search>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">%</option>
+        <option name="rangeColors">["0xdc4e41","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[79.9,89.9]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Mean Posture</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total Monitored Hosts</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats dc(eval(if(host_id=="N/A", host, host_id))) as total_hosts
+            | fields total_hosts
+          </query>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Evaluated Systems (Unique Asset ID)</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>High Risk Systems (CAT I &gt; 0)</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats dc(eval(if(cat1_fails &gt; 0, coalesce(nullif(host_id,"N/A"), host), null()))) as high_risk_hosts
+            | fields high_risk_hosts
+          </query>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[1]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Requires Immediate Action</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unique CAT I Findings</title>
+        <search>
+          <query>
+            <![CDATA[
+              `scap_index` event_type="rule_result"
+              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
+              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+              | stats dc(rule_id) as unique_cat1_rules
+              | fields unique_cat1_rules
+            ]]>
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[1]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Distinct Failing Rules Across Fleet</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total CAT I Findings</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats sum(cat1_fails) as total_cat1
+            | fields total_cat1
+          </query>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[1]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">High Severity Findings</option>
+      </single>
+    </panel>
+  </row>
+  <!-- ROW 2: VISUAL CHARTS & CCI ANALYTICS -->
+  <row id="executive_charts_row">
+    <panel>
+      <chart>
+        <title>Fleet Compliance SLA Distribution</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats avg(score_clean) as host_score by host, host_id
+            | eval Tier=case(
+                host_score &gt;= 90, "Compliant",
+                host_score &gt;= 80 AND host_score &lt; 90, "At Risk",
+                host_score &lt; 80, "Non-Compliant"
+              )
+            | stats count by Tier
+          </query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0</option>
+        <option name="charting.fieldColors">{"Compliant": 0x1e90ff, "At Risk": 0xf8be34, "Non-Compliant": 0xd95f02}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Vulnerability Severity Profile</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats sum(cat1_fails) as "CAT I (High)", sum(cat2_fails) as "CAT II (Medium)", sum(cat3_fails) as "CAT III (Low)", sum(rules_informational) as "CAT IV (Info)"
+            | eval metric="Severity"
+            | fields metric, "CAT I (High)", "CAT II (Medium)", "CAT III (Low)", "CAT IV (Info)"
+          </query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.fieldColors">{"CAT I (High)": 0xdc4e41, "CAT II (Medium)": 0xf8be34, "CAT III (Low)": 0x1e90ff, "CAT IV (Info)": 0xffffff}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+<panel>
+      <chart>
+        <title>Top Failing Control Correlation Identifiers (CCI)</title>
+        <search>
+          <query>
+            <![CDATA[
+              `scap_index` event_type="rule_result" cci_id="*"
+              | eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"),
+                     host_id=coalesce(host_id, smbios_uuid, host, "N/A"),
+                     scan_id=coalesce(scan_id, "N/A")
+              | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+              | streamstats max(_time) as latest_scan_time by host_id, benchmark_id
+              | where _time == latest_scan_time
+              | eval clean_res=lower(result)
+              | search (clean_res="fail" OR clean_res="error")
+              | stats count as fail_count, dc(host_id) as affected_hosts by cci_id
+              | sort - fail_count
+              | head 10
+              | rename cci_id as "Control Identifier (CCI)", fail_count as "Failure Count"
+            ]]>
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.fieldColors">{"Failure Count": 0xdc4e41}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <!-- ROW 3: COMPLIANCE TRENDING OVER TIME -->
+  <row id="trend_row">
+    <panel>
+      <chart>
+        <title>Compliance Posture Velocity (Daily Avg vs. 7-Day Moving Avg)</title>
+        <search>
+          <query>
+            `scap_index` event_type="scan_summary"
+            | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), 
+                   target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), 
+                   benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id)
+            | search (profile_id="$mac_tok$" OR "$mac_tok$"="*") (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+            | bin _time span=1d
+            | stats latest(benchmark_score) as daily_score by _time, host, benchmark_id
+            | timechart span=1d avg(daily_score) as raw_avg
+            | trendline sma7(raw_avg) as sma_temp
+            | eval "Daily Avg Compliance (%)"=if(isnotnull(raw_avg) AND raw_avg &gt; 0, round(raw_avg, 1), null())
+            | eval "7-Day Moving Avg (%)"=if(isnotnull(sma_temp) AND sma_temp &gt; 0, round(sma_temp, 1), null())
+            | fields _time, "Daily Avg Compliance (%)", "7-Day Moving Avg (%)"
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.axisY.minimumNumber">0</option>
+        <option name="charting.fieldColors">{"Daily Avg Compliance (%)": 0x72A2C0, "7-Day Moving Avg (%)": 0x53A051}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <!-- ROW 4: EXECUTIVE AGGREGATED TABLES WITH DRAWER DRILLDOWN -->
+  <row id="main_row">
+    <panel>
+      <table>
+        <title>Operating System Risk Summary</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats latest(target_os) as os_name, latest(target_os_version) as os_version, avg(score_clean) as mean_score, sum(cat1_fails) as cat1 by host, host_id
+            | stats count as host_count, sum(cat1) as total_cat1, avg(mean_score) as avg_score by os_name, os_version
+            | eval "Mean Score (%)"=round(avg_score, 1)
+            | fields os_name, os_version, host_count, total_cat1, "Mean Score (%)"
+            | sort - total_cat1, - host_count
+            | rename os_name as "OS Name", os_version as "OS Version", host_count as "Host Count", total_cat1 as "Total CAT I Fails"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <set token="selected_os">$row.OS Name$</set>
+          <set token="show_os_detail">true</set>
+          <set token="show_drawer">true</set>
+        </drilldown>
+      </table>
+      <table>
+        <title>STIG Benchmark Compliance Status</title>
+        <search base="base_stig_eval">
+          <query>
+            | stats avg(score_clean) as avg_score,
+                    dc(eval(if(host_id=="N/A", host, host_id))) as "Hosts Evaluated",
+                    sum(cat1_fails) as "CAT I Fails",
+                    sum(cat2_fails) as "CAT II Fails",
+                    sum(cat3_fails) as "CAT III Fails",
+                    sum(rules_informational) as "CAT IV Fails"
+                    by benchmark_id
+            | eval "Avg Score (%)"=round(avg_score, 1)
+            | fields benchmark_id, "Hosts Evaluated", "Avg Score (%)", "CAT I Fails", "CAT II Fails", "CAT III Fails", "CAT IV Fails"
+            | sort - "CAT I Fails", "Avg Score (%)"
+            | rename benchmark_id as "STIG Benchmark"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <set token="selected_benchmark">$row.STIG Benchmark$</set>
+          <set token="show_benchmark_detail">true</set>
+          <set token="show_drawer">true</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel depends="$show_drawer$">
+      <title>Contextual Investigation Drawer</title>
+      <input type="link" token="close_drawer_tok">
+        <label>Actions</label>
+        <choice value="close">✖ Close Investigation</choice>
+        <change>
+          <unset token="show_drawer"></unset>
+          <unset token="show_benchmark_detail"></unset>
+          <unset token="show_os_detail"></unset>
+          <unset token="selected_benchmark"></unset>
+          <unset token="selected_os"></unset>
+          <unset token="form.close_drawer_tok"></unset>
+        </change>
+      </input>
+      <table depends="$show_benchmark_detail$">
+        <title>Hosts Evaluated for Benchmark: $selected_benchmark$</title>
+        <search base="base_stig_eval">
+          <query>
+            | eval target_bench=trim(coalesce("$selected_benchmark$", "*"))
+            | where benchmark_id==target_bench OR target_bench=="*"
+            | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | fields host, primary_ip, target_os, target_os_version, score_clean, cat1_fails, cat2_fails, cat3_fails, rules_informational, scan_date
+            | sort score_clean
+            | rename host as "Host", primary_ip as "IP Address", target_os as "OS", target_os_version as "OS Version", score_clean as "Score (%)", cat1_fails as "CAT I Fails", cat2_fails as "CAT II Fails", cat3_fails as "CAT III Fails", rules_informational as "CAT IV Fails", scan_date as "Evaluated"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_os_detail$">
+        <title>Hosts Evaluated for Operating System: $selected_os$</title>
+        <search base="base_stig_eval">
+          <query>
+            | eval target_os_filter=trim(coalesce("$selected_os$", "*"))
+            | where target_os==target_os_filter OR target_os_filter=="*"
+            | stats avg(score_clean) as avg_score, 
+                    sum(cat1_fails) as cat1, 
+                    sum(cat2_fails) as cat2, 
+                    sum(cat3_fails) as cat3, 
+                    sum(rules_informational) as cat4,
+                    latest(primary_ip) as primary_ip, 
+                    latest(target_os_version) as target_os_version,
+                    latest(max_time) as last_eval by host, host_id
+            | eval "Mean Score (%)"=round(avg_score, 1), 
+                   scan_date=strftime(last_eval, "%m/%d/%Y %H:%M")
+            | fields host, primary_ip, target_os_version, "Mean Score (%)", cat1, cat2, cat3, cat4, scan_date
+            | sort "Mean Score (%)", - cat1
+            | rename host as "Host", primary_ip as "IP Address", target_os_version as "OS Version", cat1 as "CAT I Fails", cat2 as "CAT II Fails", cat3_fails as "CAT III Fails", cat4 as "CAT IV Fails", scan_date as "Last Evaluated"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

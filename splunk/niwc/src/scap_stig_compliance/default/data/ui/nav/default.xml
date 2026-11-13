@@ -1,0 +1,6 @@
+<nav search_view="search">
+  <view name="stig_enterprise_compliance_dashboard" default="true" label="Executive Dashboard" />
+  <view name="sysadmin_stig_dashboard" label="Sysadmin Dashboard" />
+  <view name="dashboards" />
+  <view name="search" />
+</nav>

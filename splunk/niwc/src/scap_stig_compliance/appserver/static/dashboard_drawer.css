@@ -1,0 +1,25 @@
+/* Universal Splunk Drawer Layout (Shared File) */
+#main_row > .dashboard-cell,
+.drawer-row > .dashboard-cell {
+    width: 100% !important;
+    flex-grow: 1 !important;
+    transition: width 0.2s ease-in-out;
+}
+
+#main_row > .dashboard-cell:nth-child(2),
+.drawer-row > .dashboard-cell:nth-child(2) {
+    display: none !important;
+    transition: width 0.2s ease-in-out;
+}
+
+/* Dynamic 60/40 Split when $show_drawer$ token is active */
+#main_row[data-depends*="show_drawer"] > .dashboard-cell:nth-child(1),
+.drawer-row[data-depends*="show_drawer"] > .dashboard-cell:nth-child(1) {
+    width: 60% !important;
+}
+
+#main_row[data-depends*="show_drawer"] > .dashboard-cell:nth-child(2),
+.drawer-row[data-depends*="show_drawer"] > .dashboard-cell:nth-child(2) {
+    width: 40% !important;
+    display: block !important;
+}

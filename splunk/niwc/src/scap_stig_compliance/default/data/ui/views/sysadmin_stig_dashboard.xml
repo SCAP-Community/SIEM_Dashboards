@@ -1,0 +1,1175 @@
+<form version="1.1" theme="dark" stylesheet="dashboard_drawer.css">
+  <label>SysAdmin STIG Operational Compliance View</label>
+  <description>Targeted Host Troubleshooting, Historical Trend Analysis, Result Details, and Regression Tracking, powered by NIWC Atlantic's SCAP Compliance Checker (SCC).</description>
+  <!-- Initialize Tokens to Prevent Base Search Deadlocks -->
+  <init>
+    <set token="selected_host">*</set>
+    <set token="selected_severity">*</set>
+    <set token="selected_status">*</set>
+    <set token="selected_benchmark">*</set>
+    <set token="selected_rule_id">*</set>
+    <set token="clicked_column">ALL</set>
+  </init>
+  <!-- Optimized & Robust Summary Base Search -->
+  <search id="base_summary_eval">
+    <query>
+      `scap_index` event_type="scan_summary"
+      | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), 
+             target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), 
+             primary_ip=coalesce(primary_ip, ip, "N/A"), 
+             benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
+             host_id=coalesce(host_id, smbios_uuid, host, "N/A"),
+             scan_id=coalesce(scan_id, "N/A")
+      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host="$host_search_tok$"
+      | stats latest(_time) as max_time, 
+              latest(benchmark_score) as latest_score,
+              latest(cat1_fails) as cat1_fail,
+              latest(cat2_fails) as cat2_fail,
+              latest(cat3_fails) as cat3_fail,
+              latest(cat4_fails) as cat4_fail,
+              latest(rules_error) as error_count,
+              latest(rules_not_checked) as not_checked_count,
+              latest(rules_informational) as informational_count,
+              values(primary_ip) as primary_ip,
+              latest(target_os) as target_os,
+              latest(host_id) as host_id,
+              latest(scan_id) as scan_id
+              by host, benchmark_id
+    </query>
+    <earliest>$time_tok.earliest$</earliest>
+    <latest>$time_tok.latest$</latest>
+  </search>
+  <!-- Granular Rule-Level Base Search (Optimized for Schema vuln_id, cci_id, and rule_title) -->
+  <search id="base_sysadmin_eval">
+    <query>
+      `scap_index` (result="*" OR benchmark_score="*" OR score="*") rule_id="*"
+      | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), 
+             target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), 
+             test_type=if(isnull(test_type) OR test_type=="", "Unknown", test_type),
+             primary_ip=coalesce(primary_ip, ip, "N/A"), 
+             benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
+             host_id=coalesce(host_id, smbios_uuid, host, "N/A"),
+             scan_id=coalesce(scan_id, "N/A"),
+             clean_res=lower(result),
+             vuln_id=coalesce(nullif(vuln_id,""), "N/A"),
+             cci_id=coalesce(nullif(cci_id,""), "N/A")
+      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") (test_type="$test_tok$" OR "$test_tok$"="*") host="$host_search_tok$"
+      | stats earliest(clean_res) as first_res, latest(clean_res) as last_res,
+              latest(_time) as max_time, latest(severity) as severity, 
+              latest(benchmark_score) as benchmark_score, latest(score) as score, 
+              latest(rule_title) as rule_title, latest(title) as title,
+              latest(vuln_id) as vuln_id, latest(cci_id) as cci_id,
+              values(primary_ip) as primary_ip, latest(target_os) as target_os,
+              latest(test_type) as test_type, latest(result_details) as result_details,
+              latest(host_id) as host_id, latest(scan_id) as scan_id
+              by host, benchmark_id, rule_id
+      | eval title=coalesce(nullif(rule_title, ""), nullif(title, ""), rule_id)
+      | eval clean_sev=lower(severity)
+      | eval cat_level=case(
+          clean_sev=="high" OR clean_sev=="cat i" OR clean_sev=="cat_1" OR clean_sev=="1", "CAT I (High)",
+          clean_sev=="medium" OR clean_sev=="cat ii" OR clean_sev=="cat_2" OR clean_sev=="2", "CAT II (Med)",
+          clean_sev=="low" OR clean_sev=="cat iii" OR clean_sev=="cat_3" OR clean_sev=="3", "CAT III (Low)",
+          clean_sev=="informational" OR clean_sev=="cat iv" OR clean_sev=="cat_4" OR clean_sev=="4", "CAT IV (Info)",
+          1==1, "Other"
+        )
+      | eval is_fail=if(last_res=="fail", 1, 0)
+      | eval is_pass=if(last_res=="pass", 1, 0)
+      | eval is_error=if(last_res=="error", 1, 0)
+      | eval is_not_checked=if(last_res=="notchecked" OR last_res=="not_checked" OR last_res=="not-checked" OR last_res=="not checked", 1, 0)
+      | eval is_informational=if(last_res=="informational" OR last_res=="info", 1, 0)
+      | eval is_regression=if(first_res=="pass" AND (last_res=="fail" OR last_res=="error"), 1, 0)
+      | eval score_clean=coalesce(tonumber(benchmark_score), tonumber(score), 100)
+    </query>
+    <earliest>$time_tok.earliest$</earliest>
+    <latest>$time_tok.latest$</latest>
+  </search>
+  <!-- Global Filters -->
+  <fieldset submitButton="true">
+    <input type="link" token="reset_token">
+      <label></label>
+      <choice value="clear">Clear Form</choice>
+      <change>
+        <unset token="show_drawer"></unset>
+        <unset token="show_host_benchmarks"></unset>
+        <unset token="show_rule_details"></unset>
+        <unset token="show_sev_rules"></unset>
+        <unset token="show_status_rules"></unset>
+        <unset token="show_regression_rules"></unset>
+        <unset token="show_rule_hosts"></unset>
+        <unset token="show_high_risk_hosts"></unset>
+        <unset token="show_unique_cat1_rules"></unset>
+        <set token="selected_host">*</set>
+        <set token="selected_benchmark">*</set>
+        <set token="selected_severity">*</set>
+        <set token="selected_status">*</set>
+        <set token="selected_rule_id">*</set>
+        <set token="clicked_column">ALL</set>
+        <unset token="form.os_tok"></unset>
+        <unset token="form.bench_tok"></unset>
+        <unset token="form.test_tok"></unset>
+        <unset token="form.host_search_tok"></unset>
+        <unset token="form.reset_token"></unset>
+        <eval token="form.os_tok">"*"</eval>
+        <eval token="form.bench_tok">"*"</eval>
+        <eval token="form.test_tok">"*"</eval>
+        <eval token="form.host_search_tok">"*"</eval>
+      </change>
+    </input>
+    <input type="time" token="time_tok" searchWhenChanged="true">
+      <label>Timeframe</label>
+      <default>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="os_tok" searchWhenChanged="true">
+      <label>Target OS</label>
+      <choice value="*">All</choice>
+      <default>*</default>
+      <search>
+        <query>
+          <![CDATA[
+            `scap_index` event_type="scan_summary"
+            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host="$host_search_tok$"
+            | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os)
+            | stats count by target_os
+            | sort target_os
+          ]]>
+        </query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+      <fieldForLabel>target_os</fieldForLabel>
+      <fieldForValue>target_os</fieldForValue>
+    </input>
+    <input type="dropdown" token="bench_tok" searchWhenChanged="true">
+      <label>STIG Benchmark</label>
+      <choice value="*">All Benchmarks</choice>
+      <default>*</default>
+      <fieldForLabel>benchmark_id</fieldForLabel>
+      <fieldForValue>benchmark_id</fieldForValue>
+      <search>
+        <query>`scap_index` event_type="scan_summary" earliest=-30d@d | stats count by benchmark_id | where isnotnull(benchmark_id) AND benchmark_id!="" | sort benchmark_id | fields benchmark_id</query>
+      </search>
+    </input>
+    <input type="dropdown" token="test_tok" searchWhenChanged="true">
+      <label>Test Engine Type</label>
+      <choice value="*">All Test Types</choice>
+      <default>*</default>
+      <fieldForLabel>test_type</fieldForLabel>
+      <fieldForValue>test_type</fieldForValue>
+      <search>
+        <query>`scap_index` earliest=-30d@d | eval test_type=if(isnull(test_type) OR test_type=="", "Unknown", test_type) | stats count by test_type | sort test_type | fields test_type</query>
+      </search>
+    </input>
+    <input type="text" token="host_search_tok" searchWhenChanged="true">
+      <label>Host FQDN Search (Wildcard)</label>
+      <default>*</default>
+      <prefix>*</prefix>
+      <suffix>*</suffix>
+    </input>
+  </fieldset>
+  <!-- TOP METRIC KPI CARDS -->
+  <row id="kpi_row">
+    <panel>
+      <single>
+        <title>Total Hosts</title>
+        <search base="base_summary_eval">
+          <query>| stats dc(eval(if(host_id=="N/A", host, host_id))) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="useColors">0</option>
+        <option name="underLabel">Unique Systems Evaluated</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>High Risk Systems (CAT I &gt; 0)</title>
+        <search base="base_summary_eval">
+          <query>
+            | stats sum(cat1_fail) as total_cat1_fails by host, host_id
+            | where total_cat1_fails &gt; 0
+            | stats dc(eval(if(host_id=="N/A", host, host_id))) as count
+          </query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Hosts with Critical Failures</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT I (High)</set>
+          <set token="selected_status">*</set>
+          <set token="show_drawer">true</set>
+          <set token="show_high_risk_hosts">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total Regressions</title>
+        <search base="base_sysadmin_eval">
+          <query>| stats sum(is_regression) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Pass ➔ Fail / Error</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">*</set>
+          <set token="selected_status">*</set>
+          <set token="show_drawer">true</set>
+          <set token="show_regression_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unique CAT I Findings</title>
+        <search>
+          <query>
+            <![CDATA[
+              `scap_index` event_type="rule_result" host="$host_search_tok$"
+              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
+              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+              | stats dc(rule_id) as unique_cat1_rules
+              | fields unique_cat1_rules
+            ]]>
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Distinct Failing Rules</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT I (High)</set>
+          <set token="selected_status">*</set>
+          <set token="show_drawer">true</set>
+          <set token="show_unique_cat1_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>CAT I Failures</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(cat1_fail) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">High Severity</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT I (High)</set>
+          <set token="show_drawer">true</set>
+          <set token="show_sev_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>CAT II Failures</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(cat2_fail) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Medium Severity</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT II (Med)</set>
+          <set token="show_drawer">true</set>
+          <set token="show_sev_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>CAT III Failures</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(cat3_fail) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Low Severity</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT III (Low)</set>
+          <set token="show_drawer">true</set>
+          <set token="show_sev_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Test Errors</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(error_count) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xd93f3c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="underLabel">Check Failures</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">*</set>
+          <set token="selected_status">error</set>
+          <set token="show_drawer">true</set>
+          <set token="show_status_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Informational Rules</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(informational_count) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x006d9c","0x006d9c"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Info / Advisory Checks</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">*</set>
+          <set token="selected_status">informational</set>
+          <set token="show_drawer">true</set>
+          <set token="show_status_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Not Checked</title>
+        <search base="base_summary_eval">
+          <query>| stats sum(not_checked_count) as count</query>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0x53a051","0xf8be34"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Manual/Unevaluated Checks</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">*</set>
+          <set token="selected_status">not_checked</set>
+          <set token="show_drawer">true</set>
+          <set token="show_status_rules">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Global Compliance Score</title>
+        <search base="base_summary_eval">
+          <query>
+            | stats avg(latest_score) as mean_score
+            | eval mean_score=round(mean_score, 1)
+            | fields mean_score
+          </query>
+        </search>
+        <option name="numberPrecision">0.0</option>
+        <option name="unit">%</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="rangeColors">["0xd93f3c","0xf8be34","0x53a051"]</option>
+        <option name="rangeValues">[70,85]</option>
+        <option name="useColors">1</option>
+        <option name="underLabel">Mean Fleet Posture</option>
+      </single>
+    </panel>
+  </row>
+  <!-- SECOND ROW: OS SUMMARY TABLE -->
+  <row id="os_row">
+    <panel>
+      <table>
+        <title>Asset Inventory &amp; Compliance Report by Operating System</title>
+        <search>
+          <query>
+            `scap_index` event_type="scan_summary"
+            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host="$host_search_tok$"
+            | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os),
+                   target_os_version=coalesce(target_os_version, os_version, "Unknown"),
+                   host_id=coalesce(host_id, smbios_uuid, host, "N/A")
+            | search (target_os="$os_tok$" OR "$os_tok$"="*")
+            | stats dc(eval(if(host_id=="N/A", host, host_id))) as host_count, avg(benchmark_score) as mean_score by target_os, target_os_version
+            | eval mean_score=round(mean_score, 1)
+            | sort - host_count
+            | rename target_os as "OS Name", target_os_version as "OS Version", host_count as "Host Count", mean_score as "Mean Score (%)"
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <set token="form.os_tok">$row.OS Name$</set>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <unset token="show_drawer"></unset>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <!-- MAIN WORKSPACE ROW: STACKED REPORTS (LEFT) AND SIDEBAR DRAWER (RIGHT) -->
+  <row id="main_workspace_row">
+    <panel>
+      <table id="host_summary_table">
+        <title>Enterprise Host Compliance Summary — Ranked by CAT I Failures &amp; Host (Click metric to inspect details)</title>
+        <search>
+          <query>
+            `scap_index` event_type="scan_summary"
+            | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os),
+                   target_os_version=coalesce(target_os_version, os_version, "Unknown"),
+                   primary_ip=coalesce(primary_ip, ip, "N/A"), 
+                   scc_version=if(isnull(scc_version) OR scc_version=="", "Unknown", scc_version),
+                   benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
+                   host_id=coalesce(host_id, smbios_uuid, host, "N/A"),
+                   scan_id=coalesce(scan_id, "N/A")
+            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host="$host_search_tok$"
+            | stats latest(cat1_fails) as cat1_fail, latest(cat2_fails) as cat2_fail, latest(cat3_fails) as cat3_fail, latest(cat4_fails) as cat4_fail,
+                    latest(rules_error) as error_count, latest(rules_informational) as informational_count, latest(rules_not_checked) as not_checked_count, latest(benchmark_score) as latest_score,
+                    latest(scc_version) as scc_version, max(_time) as max_time,
+                    values(primary_ip) as primary_ip, latest(target_os) as target_os, latest(target_os_version) as target_os_version,
+                    latest(host_id) as host_id, latest(scan_id) as scan_id
+                    by host, benchmark_id
+            | eval cat1_fail=coalesce(cat1_fail, 0),
+                   cat2_fail=coalesce(cat2_fail, 0),
+                   cat3_fail=coalesce(cat3_fail, 0),
+                   cat4_fail=coalesce(cat4_fail, 0),
+                   error_count=coalesce(error_count, 0),
+                   informational_count=coalesce(informational_count, 0),
+                   not_checked_count=coalesce(not_checked_count, 0)
+            | stats sum(cat1_fail) as "CAT I", sum(cat2_fail) as "CAT II", sum(cat3_fail) as "CAT III", sum(cat4_fail) as "CAT IV", 
+                    sum(error_count) as "Error", sum(informational_count) as "Info", sum(not_checked_count) as "Not Checked", 
+                    avg(latest_score) as "Mean Score",
+                    latest(scc_version) as scc_version, max(max_time) as latest_scan,
+                    values(primary_ip) as primary_ip, latest(target_os) as target_os, latest(target_os_version) as target_os_version,
+                    latest(host_id) as host_id, latest(scan_id) as scan_id
+                    by host
+            | eval "Mean Score (%)"=round('Mean Score', 1),
+                   primary_ip=mvjoin(primary_ip, ", "),
+                   host_id=coalesce(host_id, "N/A"),
+                   scan_id=coalesce(scan_id, "N/A"),
+                   scan_date=strftime(latest_scan, "%Y-%m-%d %H:%M:%S")
+            | fields host, primary_ip, target_os, target_os_version, scc_version, scan_date, "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked", "Mean Score (%)"
+            | sort - "CAT I", + host
+            | head 500
+            | rename host as "Host", primary_ip as "IP Address", target_os as "Operating System", target_os_version as "OS Version", scc_version as "SCC Version", scan_date as "Latest Scan Date"
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <condition match="$click.name2$==&quot;CAT I&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">CAT I (High)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;CAT II&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">CAT II (Med)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;CAT III&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">CAT III (Low)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;CAT IV&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">CAT IV (Info)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;Error&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">error</set>
+            <set token="show_drawer">true</set>
+            <set token="show_status_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;Info&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">informational</set>
+            <set token="show_drawer">true</set>
+            <set token="show_status_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;Not Checked&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">not_checked</set>
+            <set token="show_drawer">true</set>
+            <set token="show_status_rules">true</set>
+          </condition>
+          <condition>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">$row.Host$</set>
+            <set token="selected_benchmark">*</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_host_benchmarks">true</set>
+          </condition>
+        </drilldown>
+      </table>
+<table id="benchmark_summary_table">
+        <title>Enterprise STIG Benchmark Compliance Summary — Ranked by CAT I Failures &amp; Benchmark</title>
+        <search base="base_summary_eval">
+          <query>
+            | stats sum(cat1_fail) as "CAT I",
+                    sum(cat2_fail) as "CAT II",
+                    sum(cat3_fail) as "CAT III",
+                    sum(cat4_fail) as "CAT IV",
+                    sum(error_count) as "Error",
+                    sum(informational_count) as "Info",
+                    sum(not_checked_count) as "Not Checked",
+                    dc(eval(if(host_id=="N/A", host, host_id))) as "Evaluated Hosts",
+                    avg(latest_score) as "Mean Score"
+                    by benchmark_id
+            | eval "Mean Score (%)"=round(coalesce('Mean Score', 0), 1)
+            | fields benchmark_id, "Evaluated Hosts", "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked", "Mean Score (%)"
+            | sort - "CAT I", + benchmark_id
+            | rename benchmark_id as "STIG Benchmark"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <condition match="$click.name2$==&quot;CAT I&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">CAT I (High)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;CAT II&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">CAT II (Med)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;CAT III&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">CAT III (Low)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition name="CAT IV">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">CAT IV (Info)</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_sev_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;Error&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">error</set>
+            <set token="show_drawer">true</set>
+            <set token="show_status_rules">true</set>
+          </condition>
+          <condition match="$click.name2$==&quot;Info&quot;">
+            <unset token="show_host_benchmarks"></unset>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">informational</set>
+            <set token="show_drawer">true</set>
+            <set token="show_status_rules">true</set>
+          </condition>
+          <condition>
+            <unset token="show_rule_details"></unset>
+            <unset token="show_sev_rules"></unset>
+            <unset token="show_status_rules"></unset>
+            <unset token="show_regression_rules"></unset>
+            <unset token="show_rule_hosts"></unset>
+            <unset token="show_high_risk_hosts"></unset>
+            <unset token="show_unique_cat1_rules"></unset>
+            <set token="selected_host">*</set>
+            <set token="selected_benchmark">$row.STIG Benchmark$</set>
+            <set token="selected_severity">*</set>
+            <set token="selected_status">*</set>
+            <set token="show_drawer">true</set>
+            <set token="show_host_benchmarks">true</set>
+          </condition>
+        </drilldown>
+      </table>
+      <table id="top_rule_failures_table">
+        <title>Enterprise Top Rule Failures Compliance Summary — Ranked by Affected Hosts &amp; Severity</title>
+        <search base="base_sysadmin_eval">
+          <query>
+            | search is_fail=1
+            | stats dc(eval(if(host_id=="N/A", host, host_id))) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(title) as title, latest(benchmark_id) as benchmark_id by rule_id, cat_level
+            | sort - "Affected Hosts", cat_level, rule_id
+            | head 25
+            | table rule_id, vuln_id, cci_id, benchmark_id, cat_level, title, "Affected Hosts"
+            | rename rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", benchmark_id as "STIG Benchmark", cat_level as "Severity", title as "Vulnerability Title"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">$row.STIG Benchmark$</set>
+          <set token="selected_severity">$row.Severity$</set>
+          <set token="selected_rule_id">$row.Rule ID$</set>
+          <set token="selected_status">*</set>
+          <set token="show_drawer">true</set>
+          <set token="show_rule_hosts">true</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel depends="$show_drawer$">
+      <title>Troubleshooting Drawer</title>
+      <input type="link" token="back_to_host_bench_tok" depends="$show_rule_details$">
+        <label></label>
+        <choice value="back">⬅ Back to STIG Profiles for $selected_host$</choice>
+        <change>
+          <unset token="show_rule_details"></unset>
+          <set token="selected_benchmark">*</set>
+          <set token="clicked_column">ALL</set>
+          <set token="show_host_benchmarks">true</set>
+          <unset token="form.back_to_host_bench_tok"></unset>
+        </change>
+      </input>
+      <input type="link" token="close_drawer_tok">
+        <label>Actions</label>
+        <choice value="close">✖ Close Drawer</choice>
+        <change>
+          <unset token="show_drawer"></unset>
+          <unset token="show_host_benchmarks"></unset>
+          <unset token="show_rule_details"></unset>
+          <unset token="show_sev_rules"></unset>
+          <unset token="show_status_rules"></unset>
+          <unset token="show_regression_rules"></unset>
+          <unset token="show_rule_hosts"></unset>
+          <unset token="show_high_risk_hosts"></unset>
+          <unset token="show_unique_cat1_rules"></unset>
+          <set token="selected_host">*</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">*</set>
+          <set token="selected_status">*</set>
+          <set token="selected_rule_id">*</set>
+          <set token="clicked_column">ALL</set>
+          <unset token="form.close_drawer_tok"></unset>
+        </change>
+      </input>
+      <table depends="$show_unique_cat1_rules$">
+        <title>Unique CAT I Findings Across Fleet (Sorted by STIG &amp; Rule ID)</title>
+        <search>
+          <query>
+            <![CDATA[
+              `scap_index` event_type="rule_result" host="$host_search_tok$"
+              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"), vuln_id=coalesce(nullif(vuln_id,""),"N/A"), cci_id=coalesce(nullif(cci_id,""),"N/A")
+              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+              | stats dc(host) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(rule_title) as title by benchmark_id, rule_id
+              | eval title=coalesce(nullif(title, ""), rule_id)
+              | sort benchmark_id, rule_id
+              | table benchmark_id, rule_id, vuln_id, cci_id, title, "Affected Hosts"
+              | rename benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title"
+            ]]>
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_high_risk_hosts$">
+        <title>High Risk Systems (CAT I Failures &gt; 0)</title>
+        <search base="base_summary_eval">
+          <query>
+            | stats sum(cat1_fail) as cat1_count, sum(cat2_fail) as cat2_count, sum(cat3_fail) as cat3_count, avg(latest_score) as mean_score, max(max_time) as max_time, latest(target_os) as target_os, values(primary_ip) as primary_ip, latest(host_id) as host_id, latest(scan_id) as scan_id by host
+            | where cat1_count &gt; 0
+            | eval "Mean Score (%)"=round(mean_score, 1), primary_ip=mvjoin(primary_ip, ", "), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A"), scan_date=strftime(max_time, "%Y-%m-%d %H:%M:%S")
+            | table host, primary_ip, target_os, cat1_count, cat2_count, cat3_count, "Mean Score (%)", scan_date
+            | sort - cat1_count, host
+            | rename host as "Host", primary_ip as "IP Address", target_os as "Operating System", cat1_count as "CAT I Fails", cat2_count as "CAT II Fails", cat3_count as "CAT III Fails", scan_date as "Last Evaluated"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <unset token="show_high_risk_hosts"></unset>
+          <set token="selected_host">$row.Host$</set>
+          <set token="selected_benchmark">*</set>
+          <set token="selected_severity">CAT I (High)</set>
+          <set token="show_sev_rules">true</set>
+        </drilldown>
+      </table>
+      <table depends="$show_host_benchmarks$">
+        <title>STIG Profiles for: $selected_host$</title>
+        <search>
+          <query>
+            `scap_index` host="$selected_host$" event_type="scan_summary"
+            | eval benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
+                   scan_id=coalesce(scan_id, "N/A")
+            | stats max(_time) as max_time, latest(benchmark_score) as benchmark_score,
+                    latest(cat1_fails) as "CAT I", latest(cat2_fails) as "CAT II", latest(cat3_fails) as "CAT III", latest(cat4_fails) as "CAT IV",
+                    latest(rules_error) as "Error", latest(rules_informational) as "Info", latest(rules_not_checked) as "Not Checked",
+                    latest(scan_id) as scan_id
+                    by benchmark_id
+            | join type=left benchmark_id [
+                search `scap_index` host="$selected_host$" (result="*" OR benchmark_score="*" OR score="*") rule_id="*"
+                | stats earliest(lower(result)) as first_res, latest(lower(result)) as last_res by benchmark_id, rule_id
+                | eval is_reg=if(first_res=="pass" AND (last_res=="fail" OR last_res=="error"), 1, 0)
+                | stats sum(is_reg) as "Regressions" by benchmark_id
+              ]
+            | eval "Regressions"=coalesce('Regressions', 0), "Score (%)"=round(benchmark_score, 1), scan_id=coalesce(scan_id, "N/A"), scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | fields benchmark_id, "Score (%)", scan_date, "Regressions", "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked"
+            | sort benchmark_id
+            | rename benchmark_id as "STIG Benchmark", scan_date as "Last Evaluated"
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="rowNumbers">true</option>
+        <drilldown>
+          <set token="selected_benchmark">$row.STIG Benchmark$</set>
+          <set token="clicked_column">$click.name2$</set>
+          <unset token="show_host_benchmarks"></unset>
+          <set token="show_rule_details">true</set>
+        </drilldown>
+      </table>
+      <table depends="$show_sev_rules$">
+        <title>Failed Rules Overview (Severity: $selected_severity$)</title>
+        <search base="base_sysadmin_eval">
+          <query>
+            | search is_fail=1 cat_level="$selected_severity$" host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | eval result_details=coalesce(result_details, "No additional detail provided."),
+                   scan_id=coalesce(scan_id, "N/A")
+            | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | table host, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
+            | sort host, benchmark_id, rule_id
+            | rename host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Failure Reason", scan_date as "Evaluated"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_status_rules$">
+        <title>Status Rules Overview (Filter: $selected_status$)</title>
+        <search base="base_sysadmin_eval">
+          <query>
+            | search host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | where ("$selected_status$"=="error" AND is_error==1) OR 
+                    ("$selected_status$"=="not_checked" AND is_not_checked==1) OR
+                    ("$selected_status$"=="informational" AND is_informational==1) OR
+                    ("$selected_status$"=="*" AND (is_error==1 OR is_not_checked==1 OR is_informational==1))
+            | eval result_details=coalesce(result_details, "No additional detail provided."),
+                   scan_id=coalesce(scan_id, "N/A")
+            | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | table host, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
+            | sort host, benchmark_id, rule_id
+            | rename host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Result Detail", scan_date as "Evaluated"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_rule_details$">
+        <title>Failures for $selected_benchmark$ ($clicked_column$)</title>
+        <search base="base_sysadmin_eval">
+          <query>
+            | search is_fail=1 host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | eval raw_col="$clicked_column$"
+            | eval target_cat=case(
+                match(raw_col, "^\\$") OR raw_col=="ALL" OR raw_col=="STIG Benchmark" OR raw_col=="Score (%)" OR raw_col=="Last Evaluated", "ALL",
+                like(raw_col, "%CAT IV%"), "CAT IV (Info)",
+                like(raw_col, "%CAT III%"), "CAT III (Low)",
+                like(raw_col, "%CAT II%"), "CAT II (Med)",
+                like(raw_col, "%CAT I%"), "CAT I (High)",
+                1==1, "ALL"
+              )
+            | where target_cat=="ALL" OR cat_level==target_cat
+            | eval result_details=coalesce(result_details, "No additional detail provided."),
+                   scan_id=coalesce(scan_id, "N/A")
+            | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | table rule_id, vuln_id, cci_id, cat_level, title, result_details, scan_date
+            | sort cat_level, rule_id
+            | rename rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", cat_level as "Severity", title as "Vulnerability Title", result_details as "Failure Reason", scan_date as "Evaluated"
+          </query>
+        </search>
+        <option name="count">10</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_regression_rules$">
+        <title>Recent Regressions (Pass ➔ Fail/Error)</title>
+        <search>
+          <query>
+            <![CDATA[
+              `scap_index` (result="*" OR benchmark_score="*" OR score="*") rule_id="*" host="$selected_host$" benchmark_id="$selected_benchmark$"
+              | eval clean_res=lower(result), vuln_id=coalesce(nullif(vuln_id,""),"N/A"), cci_id=coalesce(nullif(cci_id,""),"N/A")
+              | sort 0 host, benchmark_id, rule_id, _time
+              | eventstats max(_time) as absolute_latest_time by host, benchmark_id, rule_id
+              | streamstats current=f window=1 last(clean_res) as prev_res, last(_time) as prev_time by host, benchmark_id, rule_id
+              | eval is_reg=if(prev_res=="pass" AND (clean_res=="fail" OR clean_res=="error"), 1, 0)
+              | where is_reg=1
+              | stats latest(_time) as transition_time, latest(absolute_latest_time) as latest_time, latest(rule_title) as rule_title, latest(title) as title, latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(result_details) as result_details, latest(prev_res) as prev_res, latest(clean_res) as clean_res by host, benchmark_id, rule_id
+              | eval title=coalesce(nullif(rule_title, ""), nullif(title, ""), rule_id)
+              | eval result_details=coalesce(result_details, "No additional detail provided."),
+                     regression_date=strftime(transition_time, "%m/%d/%Y %H:%M"),
+                     latest_scan_date=strftime(latest_time, "%m/%d/%Y %H:%M"),
+                     transition=prev_res . " ➔ " . clean_res
+              | table host, benchmark_id, rule_id, vuln_id, cci_id, title, transition, result_details, regression_date, latest_scan_date
+              | sort - transition_time
+              | rename host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", transition as "State Change", result_details as "Failure/Error Detail", regression_date as "Regression Date", latest_scan_date as "Latest Scan Date"
+            ]]>
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+      <table depends="$show_rule_hosts$">
+        <title>Affected Hosts for Rule: $selected_rule_id$</title>
+        <search base="base_sysadmin_eval">
+          <query>
+            | search is_fail=1 rule_id="$selected_rule_id$" benchmark_id="$selected_benchmark$"
+            | dedup host, benchmark_id, rule_id
+            | join type=left host, benchmark_id [
+                search `scap_index` event_type="scan_summary"
+                | stats latest(primary_ip) as primary_ip, latest(ip) as ip, latest(target_os) as target_os, latest(host_id) as host_id, latest(scan_id) as scan_id by host, benchmark_id
+                | eval primary_ip=coalesce(primary_ip, ip, "N/A"), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A")
+                | fields host, host_id, scan_id, benchmark_id, primary_ip, target_os
+              ]
+            | eval primary_ip=coalesce(primary_ip, "N/A"), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A")
+            | eval result_details=coalesce(result_details, "No additional detail provided.")
+            | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
+            | table host, primary_ip, target_os, vuln_id, cci_id, result_details, scan_date
+            | sort host
+            | rename host as "Host", primary_ip as "IP Address", target_os as "Operating System", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", result_details as "Failure Reason", scan_date as "Evaluated"
+          </query>
+        </search>
+        <option name="count">15</option>
+        <option name="rowNumbers">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row depends="$show_host_benchmarks$">
+    <panel>
+      <title>Overall Mean Compliance Score Over Time: $selected_host$</title>
+      <chart>
+        <search>
+          <query>
+            `scap_index` host="$selected_host$" event_type="scan_summary" benchmark_score="*"
+            | timechart span=1d avg(benchmark_score) as "Mean Score (%)"
+            | makecontinuous _time span=1d
+            | eval "Mean Score (%)"=round('Mean Score (%)', 1)
+            | fields _time, "Mean Score (%)"
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.axisY.minimumNumber">0</option>
+        <option name="charting.fieldColors">{"Mean Score (%)": 0x53A051}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Benchmark Compliance Score Trend Over Time: $selected_host$</title>
+      <chart>
+        <search>
+          <query>
+            `scap_index` host="$selected_host$" event_type="scan_summary" benchmark_score="*"
+            | timechart span=1d avg(benchmark_score) as avg_score by benchmark_id
+            | makecontinuous _time span=1d
+            | eval "Score (%)"=round(avg_score, 1)
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.axisY.minimumNumber">0</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Enterprise Global Mean Compliance Score Over Time (Scoped Selection)</title>
+      <chart>
+        <search>
+          <query>
+            `scap_index` event_type="scan_summary" benchmark_score="*"
+            | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id)
+            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host="$host_search_tok$"
+            | timechart span=1d avg(benchmark_score) as "Global Mean Score (%)"
+            | makecontinuous _time span=1d
+            | eval "Global Mean Score (%)"=round('Global Mean Score (%)', 1)
+          </query>
+          <earliest>$time_tok.earliest$</earliest>
+          <latest>$time_tok.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.axisY.minimumNumber">0</option>
+        <option name="charting.fieldColors">{"Global Mean Score (%)": 0x0066CC}</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+</form>

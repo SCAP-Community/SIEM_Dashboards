@@ -1,0 +1,319 @@
+{
+    "modelName": "SCAP_Compliance_Executive_Summary",
+    "displayName": "SCAP Compliance Executive Summary",
+    "description": "",
+    "objectSummary": {
+        "Event-Based": 1,
+        "Transaction-Based": 0,
+        "Search-Based": 0
+    },
+    "objects": [
+        {
+            "objectName": "Scan_Summary",
+            "displayName": "Scan Summary",
+            "parentName": "BaseEvent",
+            "comment": "",
+            "fields": [
+                {
+                    "fieldName": "benchmark_id",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "benchmark_id",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "benchmark_score",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "benchmark_score",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "benchmark_version",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "benchmark_version",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "cat1_fails",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "cat1_fails",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "cat2_fails",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "cat2_fails",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "cat3_fails",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "cat3_fails",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "cat4_fails",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "cat4_fails",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "profile_id",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "profile_id",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_error",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_error",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_failed",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_failed",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_informational",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_informational",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_not_applicable",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_not_applicable",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_not_checked",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_not_checked",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_passed",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_passed",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "rules_total",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "rules_total",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "scc_version",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "scc_version",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "smbios_uuid",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "smbios_uuid",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "target_os",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "target_os",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "target_os_family",
+                    "owner": "Scan_Summary",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "target_os_family",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "target_os_version",
+                    "owner": "Scan_Summary",
+                    "type": "number",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "target_os_version",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "_time",
+                    "owner": "BaseEvent",
+                    "type": "timestamp",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "_time",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "host",
+                    "owner": "BaseEvent",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "host",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "source",
+                    "owner": "BaseEvent",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "source",
+                    "comment": ""
+                },
+                {
+                    "fieldName": "sourcetype",
+                    "owner": "BaseEvent",
+                    "type": "string",
+                    "fieldSearch": "",
+                    "required": false,
+                    "multivalue": false,
+                    "hidden": false,
+                    "editable": true,
+                    "displayName": "sourcetype",
+                    "comment": ""
+                }
+            ],
+            "calculations": [],
+            "constraints": [
+                {
+                    "search": "index=\"scap-scc\" event_type=\"scan_summary\"",
+                    "owner": "Scan_Summary"
+                }
+            ],
+            "lineage": "Scan_Summary"
+        }
+    ],
+    "objectNameList": [
+        "Scan_Summary"
+    ]
+}
