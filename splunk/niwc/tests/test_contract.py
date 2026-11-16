@@ -12,8 +12,36 @@ class ContractChecks(unittest.TestCase):
             self.assertNotIn('target_host',data)
             self.assertNotIn('scc_version',data)
         s=(SRC/'default/data/ui/views/sysadmin_stig_dashboard.xml').read_text()
-        self.assertIn('scanner_name as "Scanner"',s)
+        self.assertIn('scanner_name as "Scanner Name"',s)
         self.assertIn('scanner_version as "Scanner Version"',s)
+    def test_approved_visible_branding(self):
+        ex = ET.parse(SRC/'default/data/ui/views/stig_enterprise_compliance_dashboard.xml').getroot()
+        sy = ET.parse(SRC/'default/data/ui/views/sysadmin_stig_dashboard.xml').getroot()
+        self.assertEqual(ex.findtext('label'), 'Enterprise SCAP & STIG Compliance')
+        self.assertEqual(ex.findtext('description'), 'Enterprise-wide SCAP and STIG compliance monitoring across assessed systems and benchmarks.')
+        self.assertEqual(sy.findtext('label'), 'System STIG Compliance Dashboard')
+        self.assertEqual(sy.findtext('description'), 'Host-level compliance analysis, assessment findings, historical trends, and regression tracking.')
+        for obj in (ex, sy):
+            rendered = ET.tostring(obj, encoding='unicode')
+            for unsupported in ('SCC Version', 'Powered by', 'SCAP Compliance Checker'):
+                self.assertNotIn(unsupported, rendered)
+        src = (SRC/'default/data/ui/views/sysadmin_stig_dashboard.xml').read_text()
+        self.assertIn('scanner_name as "Scanner Name"', src)
+        self.assertIn('scanner_version as "Scanner Version"', src)
+        conf = (SRC/'default/app.conf').read_text()
+        self.assertIn('version = 0.2.0', conf)
+        self.assertIn('author = NIWC Atlantic', conf)
+        self.assertIn('description = Dashboards for monitoring SCAP and STIG compliance results from compatible assessment scanners.', conf)
+    def test_no_old_scc_column_name(self):
+        from pathlib import Path
+        views = SRC/'default/data/ui/views'
+        for name in ('stig_enterprise_compliance_dashboard.xml', 'sysadmin_stig_dashboard.xml'):
+            content = (views/name).read_text()
+            self.assertNotIn('SCC Version', content)
+            self.assertNotIn('Powered by', content)
+        table=(views/'sysadmin_stig_dashboard.xml').read_text()
+        self.assertEqual(table.count('scanner_name as "Scanner Name"'), 1)
+        self.assertEqual(table.count('scanner_version as "Scanner Version"'), 1)
     def test_calculated_fallbacks(self):
         s=(SRC/'default/props.conf').read_text()
         self.assertIn('KV_MODE = json',s)

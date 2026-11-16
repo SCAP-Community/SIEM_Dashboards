@@ -4,7 +4,7 @@ This directory contains source, installable `.spl`, documentation, and validatio
 
 - `src/scap_stig_compliance/` — installable app source
 - `build/scap_stig_compliance-0.2.0.spl` — compiled Splunk application (tar.gz)
-- `docs/` — producer-neutral guide and SCC 5.16 integration companion, DOCX/PDF
+- `docs/` — producer-neutral dashboard guide, DOCX/PDF; SCC-specific release docs are distributed separately
 - `INSTALL.md` — macro override and ingestion instructions
 - `CHANGELOG-0.2.0.md` — change log and remaining limitations
 - `tests/` — static contract regression tests and synthetic example data

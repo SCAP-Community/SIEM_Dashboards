@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" stylesheet="dashboard_drawer.css">
-  <label>Enterprise STIG Compliance Dashboard</label>
-  <description>Executive STIG Compliance Monitoring for Enterprise Assets (Powered by results from NIWC Atlantic's SCAP Compliance Checker)</description>
+  <label>Enterprise SCAP &amp; STIG Compliance</label>
+  <description>Enterprise-wide SCAP and STIG compliance monitoring across assessed systems and benchmarks.</description>
   <!-- Global Base Search (Optimized Raw Index Search for 100K Scale) -->
   <search id="base_stig_eval">
     <query>

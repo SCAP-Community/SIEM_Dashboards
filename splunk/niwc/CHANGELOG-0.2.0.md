@@ -31,3 +31,34 @@
 - SCC must independently implement producer-side output of `host_name`, `scanner_name`, `scanner_version` on every event. The supplied manually edited SCC sample only showed `target_host`; it did not establish exporter support.
 - Repeated imports of the same `scan_id` are not automatically deduplicated.
 - New producer-side field names constitute a reporting contract change; a separately ratified schema version is recommended. Illustrative 2.0.0 events in the guides are *examples*, not proof SCC 5.16 emits that schema.
+
+## Approved dashboard branding cleanup (16 November 2026)
+
+The application version stays **0.2.0** by owner decision. This rebuilt archive supersedes previous 0.2.0 artifacts, including an earlier standalone `.spl` that did not match the repository package.
+
+### Changes in this rebuild
+
+- `src/scap_stig_compliance/default/data/ui/views/stig_enterprise_compliance_dashboard.xml` — title: **Enterprise SCAP & STIG Compliance**; description changed to remove the source-specific “Powered by … SCAP Compliance Checker” attribution.
+- `src/scap_stig_compliance/default/data/ui/views/sysadmin_stig_dashboard.xml` — title: **System STIG Compliance Dashboard**; description updated. Existing **Scanner** and **Scanner Version** columns retained.
+- `src/scap_stig_compliance/default/app.conf` — approved producer-neutral application description; `author = NIWC Atlantic`, the app ID and version `0.2.0` remain unchanged.
+- `tests/test_contract.py` — new checks for approved titles, descriptions, scanner columns and absence of SCC-specific branding in dashboard XML.
+- `build/scap_stig_compliance-0.2.0.spl` — regenerated from the exact source included here.
+- `INSTALL.md` and `readme.md` — clarified that SCC-specific release guides are distributed separately.
+
+### Removed from repository bundle
+
+- `docs/SCC_5.16_Splunk_Integration_Companion_v0.2.0.docx`
+- `docs/SCC_5.16_Splunk_Integration_Companion_v0.2.0.pdf`
+
+These SCC-specific guides are maintained with the SCC release, not the community dashboard repository. The producer-neutral Word/PDF guide remains.
+
+The `scap_index` macro and its customer override in `local/macros.conf` remain unchanged. No existing SPL queries or historical analytics were otherwise changed. Splunk runtime qualification remains outstanding.
+
+## Scanner Name display correction and installed-dashboard verification
+
+- `src/scap_stig_compliance/default/data/ui/views/sysadmin_stig_dashboard.xml`: corrected visible host-summary field alias from `Scanner` to **Scanner Name**; retained **Scanner Version**. No collection, aggregation, or search-logic changes.
+- `tests/test_contract.py`: strengthened assertions to reject `SCC Version`, to require the exact pair `Scanner Name` and `Scanner Version`, and to reject the legacy branding string.
+- `VERIFY_INSTALLED_DASHBOARDS.md`: added safe verification steps for older installed views, local/user overrides, same-version upgrades, and the existing index macro.
+- `build/scap_stig_compliance-0.2.0.spl`: repackaged to match the source files.
+
+The community GitHub repository is **not** modified by generating this archive. A deployment using files currently on GitHub must be updated separately.

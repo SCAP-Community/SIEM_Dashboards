@@ -56,4 +56,4 @@ Configure `sourcetype=scap:json`, event boundaries, `_time` mapping from UNIX-se
 
 Structural checks and sample-data validation are not live Splunk qualification. The existing zero-score trend, latest-scan CCI selection, and multi-scan regression issues have not been corrected by these field-name changes. Full installation and AppInspect/btool/runtime verification are still required.
 
-See the two producer-neutral / SCC-specific guides in `docs/` and `CHANGELOG-0.2.0.md` for the file change register.
+See the producer-neutral dashboard guide in `docs/` and `CHANGELOG-0.2.0.md` for the file change register. SCC-specific configuration guides are distributed with SCC.

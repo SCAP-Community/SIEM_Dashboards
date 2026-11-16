@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" stylesheet="dashboard_drawer.css">
-  <label>SysAdmin STIG Operational Compliance View</label>
-  <description>Targeted Host Troubleshooting, Historical Trend Analysis, Result Details, and Regression Tracking, supporting normalized events from compatible SCAP assessment producers.</description>
+  <label>System STIG Compliance Dashboard</label>
+  <description>Host-level compliance analysis, assessment findings, historical trends, and regression tracking.</description>
   <!-- Initialize Tokens to Prevent Base Search Deadlocks -->
   <init>
     <set token="selected_host">*</set>
@@ -564,7 +564,7 @@
             | fields host_name, primary_ip, target_os, target_os_version, scanner_name, scanner_version, scan_date, "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked", "Mean Score (%)"
             | sort - "CAT I", + host_name
             | head 500
-            | rename host_name as "Host", primary_ip as "IP Address", target_os as "Operating System", target_os_version as "OS Version", scanner_name as "Scanner", scanner_version as "Scanner Version", scan_date as "Latest Scan Date"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "Operating System", target_os_version as "OS Version", scanner_name as "Scanner Name", scanner_version as "Scanner Version", scan_date as "Latest Scan Date"
           </query>
           <earliest>$time_tok.earliest$</earliest>
           <latest>$time_tok.latest$</latest>
