@@ -42,10 +42,4 @@ export = system
 access = read : [ * ], write : [ admin, power ]
 export = system
 
-[datamodels/SCAP_Compliance_Executive_Summary]
-access = read : [ * ], write : [ admin ]
-export = system
 
-[models/SCAP_Compliance_Executive_Summary]
-access = read : [ * ], write : [ admin ]
-export = system
