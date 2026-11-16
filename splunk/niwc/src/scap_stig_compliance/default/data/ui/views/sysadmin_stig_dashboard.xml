@@ -1,6 +1,6 @@
 <form version="1.1" theme="dark" stylesheet="dashboard_drawer.css">
   <label>SysAdmin STIG Operational Compliance View</label>
-  <description>Targeted Host Troubleshooting, Historical Trend Analysis, Result Details, and Regression Tracking, powered by NIWC Atlantic's SCAP Compliance Checker (SCC).</description>
+  <description>Targeted Host Troubleshooting, Historical Trend Analysis, Result Details, and Regression Tracking, supporting normalized events from compatible SCAP assessment producers.</description>
   <!-- Initialize Tokens to Prevent Base Search Deadlocks -->
   <init>
     <set token="selected_host">*</set>
@@ -18,9 +18,9 @@
              target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), 
              primary_ip=coalesce(primary_ip, ip, "N/A"), 
              benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
-             host_id=coalesce(host_id, smbios_uuid, target_host, "N/A"),
+             host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
              scan_id=coalesce(scan_id, "N/A")
-      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") target_host="$host_search_tok$"
+      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host_name="$host_search_tok$"
       | stats latest(_time) as max_time, 
               latest(benchmark_score) as latest_score,
               latest(cat1_fails) as cat1_fail,
@@ -34,7 +34,7 @@
               latest(target_os) as target_os,
               latest(host_id) as host_id,
               latest(scan_id) as scan_id
-              by target_host, benchmark_id
+              by host_name, benchmark_id
     </query>
     <earliest>$time_tok.earliest$</earliest>
     <latest>$time_tok.latest$</latest>
@@ -48,12 +48,12 @@
              test_type=if(isnull(test_type) OR test_type=="", "Unknown", test_type),
              primary_ip=coalesce(primary_ip, ip, "N/A"), 
              benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
-             host_id=coalesce(host_id, smbios_uuid, target_host, "N/A"),
+             host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
              scan_id=coalesce(scan_id, "N/A"),
              clean_res=lower(result),
              vuln_id=coalesce(nullif(vuln_id,""), "N/A"),
              cci_id=coalesce(nullif(cci_id,""), "N/A")
-      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") (test_type="$test_tok$" OR "$test_tok$"="*") target_host="$host_search_tok$"
+      | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") (test_type="$test_tok$" OR "$test_tok$"="*") host_name="$host_search_tok$"
       | stats earliest(clean_res) as first_res, latest(clean_res) as last_res,
               latest(_time) as max_time, latest(severity) as severity, 
               latest(benchmark_score) as benchmark_score, latest(score) as score, 
@@ -62,7 +62,7 @@
               values(primary_ip) as primary_ip, latest(target_os) as target_os,
               latest(test_type) as test_type, latest(result_details) as result_details,
               latest(host_id) as host_id, latest(scan_id) as scan_id
-              by target_host, benchmark_id, rule_id
+              by host_name, benchmark_id, rule_id
       | eval title=coalesce(nullif(rule_title, ""), nullif(title, ""), rule_id)
       | eval clean_sev=lower(severity)
       | eval cat_level=case(
@@ -130,7 +130,7 @@
         <query>
           <![CDATA[
             `scap_index` event_type="scan_summary"
-            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") target_host="$host_search_tok$"
+            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host_name="$host_search_tok$"
             | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os)
             | stats count by target_os
             | sort target_os
@@ -175,7 +175,7 @@
       <single>
         <title>Total Hosts</title>
         <search base="base_summary_eval">
-          <query>| stats dc(eval(if(host_id=="N/A", target_host, host_id))) as count</query>
+          <query>| stats dc(eval(if(host_id=="N/A", host_name, host_id))) as count</query>
         </search>
         <option name="colorBy">value</option>
         <option name="colorMode">none</option>
@@ -188,9 +188,9 @@
         <title>High Risk Systems (CAT I &gt; 0)</title>
         <search base="base_summary_eval">
           <query>
-            | stats sum(cat1_fail) as total_cat1_fails by target_host, host_id
+            | stats sum(cat1_fail) as total_cat1_fails by host_name, host_id
             | where total_cat1_fails &gt; 0
-            | stats dc(eval(if(host_id=="N/A", target_host, host_id))) as count
+            | stats dc(eval(if(host_id=="N/A", host_name, host_id))) as count
           </query>
         </search>
         <option name="colorBy">value</option>
@@ -253,7 +253,7 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result" target_host="$host_search_tok$"
+              `scap_index` event_type="rule_result" host_name="$host_search_tok$"
               | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
               | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
               | stats dc(rule_id) as unique_cat1_rules
@@ -487,12 +487,12 @@
         <search>
           <query>
             `scap_index` event_type="scan_summary"
-            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") target_host="$host_search_tok$"
+            | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host_name="$host_search_tok$"
             | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os),
                    target_os_version=coalesce(target_os_version, os_version, "Unknown"),
-                   host_id=coalesce(host_id, smbios_uuid, target_host, "N/A")
+                   host_id=coalesce(host_id, smbios_uuid, host_name, "N/A")
             | search (target_os="$os_tok$" OR "$os_tok$"="*")
-            | stats dc(eval(if(host_id=="N/A", target_host, host_id))) as host_count, avg(benchmark_score) as mean_score by target_os, target_os_version
+            | stats dc(eval(if(host_id=="N/A", host_name, host_id))) as host_count, avg(benchmark_score) as mean_score by target_os, target_os_version
             | eval mean_score=round(mean_score, 1)
             | sort - host_count
             | rename target_os as "OS Name", target_os_version as "OS Version", host_count as "Host Count", mean_score as "Mean Score (%)"
@@ -530,17 +530,18 @@
             | eval target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os),
                    target_os_version=coalesce(target_os_version, os_version, "Unknown"),
                    primary_ip=coalesce(primary_ip, ip, "N/A"), 
-                   scc_version=if(isnull(scc_version) OR scc_version=="", "Unknown", scc_version),
+                   scanner_name=if(isnull(scanner_name) OR scanner_name=="", "Unknown", scanner_name),
+                   scanner_version=if(isnull(scanner_version) OR scanner_version=="", "Unknown", scanner_version),
                    benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
-                   host_id=coalesce(host_id, smbios_uuid, target_host, "N/A"),
+                   host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
                    scan_id=coalesce(scan_id, "N/A")
-            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") target_host="$host_search_tok$"
+            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host_name="$host_search_tok$"
             | stats latest(cat1_fails) as cat1_fail, latest(cat2_fails) as cat2_fail, latest(cat3_fails) as cat3_fail, latest(cat4_fails) as cat4_fail,
                     latest(rules_error) as error_count, latest(rules_informational) as informational_count, latest(rules_not_checked) as not_checked_count, latest(benchmark_score) as latest_score,
-                    latest(scc_version) as scc_version, max(_time) as max_time,
+                    latest(scanner_name) as scanner_name, latest(scanner_version) as scanner_version, max(_time) as max_time,
                     values(primary_ip) as primary_ip, latest(target_os) as target_os, latest(target_os_version) as target_os_version,
                     latest(host_id) as host_id, latest(scan_id) as scan_id
-                    by target_host, benchmark_id
+                    by host_name, benchmark_id
             | eval cat1_fail=coalesce(cat1_fail, 0),
                    cat2_fail=coalesce(cat2_fail, 0),
                    cat3_fail=coalesce(cat3_fail, 0),
@@ -551,19 +552,19 @@
             | stats sum(cat1_fail) as "CAT I", sum(cat2_fail) as "CAT II", sum(cat3_fail) as "CAT III", sum(cat4_fail) as "CAT IV", 
                     sum(error_count) as "Error", sum(informational_count) as "Info", sum(not_checked_count) as "Not Checked", 
                     avg(latest_score) as "Mean Score",
-                    latest(scc_version) as scc_version, max(max_time) as latest_scan,
+                    latest(scanner_name) as scanner_name, latest(scanner_version) as scanner_version, max(max_time) as latest_scan,
                     values(primary_ip) as primary_ip, latest(target_os) as target_os, latest(target_os_version) as target_os_version,
                     latest(host_id) as host_id, latest(scan_id) as scan_id
-                    by target_host
+                    by host_name
             | eval "Mean Score (%)"=round('Mean Score', 1),
                    primary_ip=mvjoin(primary_ip, ", "),
                    host_id=coalesce(host_id, "N/A"),
                    scan_id=coalesce(scan_id, "N/A"),
                    scan_date=strftime(latest_scan, "%Y-%m-%d %H:%M:%S")
-            | fields target_host, primary_ip, target_os, target_os_version, scc_version, scan_date, "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked", "Mean Score (%)"
-            | sort - "CAT I", + target_host
+            | fields host_name, primary_ip, target_os, target_os_version, scanner_name, scanner_version, scan_date, "CAT I", "CAT II", "CAT III", "CAT IV", "Error", "Info", "Not Checked", "Mean Score (%)"
+            | sort - "CAT I", + host_name
             | head 500
-            | rename target_host as "Host", primary_ip as "IP Address", target_os as "Operating System", target_os_version as "OS Version", scc_version as "SCC Version", scan_date as "Latest Scan Date"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "Operating System", target_os_version as "OS Version", scanner_name as "Scanner", scanner_version as "Scanner Version", scan_date as "Latest Scan Date"
           </query>
           <earliest>$time_tok.earliest$</earliest>
           <latest>$time_tok.latest$</latest>
@@ -711,7 +712,7 @@
                     sum(error_count) as "Error",
                     sum(informational_count) as "Info",
                     sum(not_checked_count) as "Not Checked",
-                    dc(eval(if(host_id=="N/A", target_host, host_id))) as "Evaluated Hosts",
+                    dc(eval(if(host_id=="N/A", host_name, host_id))) as "Evaluated Hosts",
                     avg(latest_score) as "Mean Score"
                     by benchmark_id
             | eval "Mean Score (%)"=round(coalesce('Mean Score', 0), 1)
@@ -841,7 +842,7 @@
         <search base="base_sysadmin_eval">
           <query>
             | search is_fail=1
-            | stats dc(eval(if(host_id=="N/A", target_host, host_id))) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(title) as title, latest(benchmark_id) as benchmark_id by rule_id, cat_level
+            | stats dc(eval(if(host_id=="N/A", host_name, host_id))) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(title) as title, latest(benchmark_id) as benchmark_id by rule_id, cat_level
             | sort - "Affected Hosts", cat_level, rule_id
             | head 25
             | table rule_id, vuln_id, cci_id, benchmark_id, cat_level, title, "Affected Hosts"
@@ -908,10 +909,10 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result" target_host="$host_search_tok$"
+              `scap_index` event_type="rule_result" host_name="$host_search_tok$"
               | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"), vuln_id=coalesce(nullif(vuln_id,""),"N/A"), cci_id=coalesce(nullif(cci_id,""),"N/A")
               | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
-              | stats dc(target_host) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(rule_title) as title by benchmark_id, rule_id
+              | stats dc(host_name) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(rule_title) as title by benchmark_id, rule_id
               | eval title=coalesce(nullif(title, ""), rule_id)
               | sort benchmark_id, rule_id
               | table benchmark_id, rule_id, vuln_id, cci_id, title, "Affected Hosts"
@@ -929,12 +930,12 @@
         <title>High Risk Systems (CAT I Failures &gt; 0)</title>
         <search base="base_summary_eval">
           <query>
-            | stats sum(cat1_fail) as cat1_count, sum(cat2_fail) as cat2_count, sum(cat3_fail) as cat3_count, avg(latest_score) as mean_score, max(max_time) as max_time, latest(target_os) as target_os, values(primary_ip) as primary_ip, latest(host_id) as host_id, latest(scan_id) as scan_id by target_host
+            | stats sum(cat1_fail) as cat1_count, sum(cat2_fail) as cat2_count, sum(cat3_fail) as cat3_count, avg(latest_score) as mean_score, max(max_time) as max_time, latest(target_os) as target_os, values(primary_ip) as primary_ip, latest(host_id) as host_id, latest(scan_id) as scan_id by host_name
             | where cat1_count &gt; 0
             | eval "Mean Score (%)"=round(mean_score, 1), primary_ip=mvjoin(primary_ip, ", "), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A"), scan_date=strftime(max_time, "%Y-%m-%d %H:%M:%S")
-            | table target_host, primary_ip, target_os, cat1_count, cat2_count, cat3_count, "Mean Score (%)", scan_date
-            | sort - cat1_count, target_host
-            | rename target_host as "Host", primary_ip as "IP Address", target_os as "Operating System", cat1_count as "CAT I Fails", cat2_count as "CAT II Fails", cat3_count as "CAT III Fails", scan_date as "Last Evaluated"
+            | table host_name, primary_ip, target_os, cat1_count, cat2_count, cat3_count, "Mean Score (%)", scan_date
+            | sort - cat1_count, host_name
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "Operating System", cat1_count as "CAT I Fails", cat2_count as "CAT II Fails", cat3_count as "CAT III Fails", scan_date as "Last Evaluated"
           </query>
         </search>
         <option name="count">15</option>
@@ -951,7 +952,7 @@
         <title>STIG Profiles for: $selected_host$</title>
         <search>
           <query>
-            `scap_index` target_host="$selected_host$" event_type="scan_summary"
+            `scap_index` host_name="$selected_host$" event_type="scan_summary"
             | eval benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
                    scan_id=coalesce(scan_id, "N/A")
             | stats max(_time) as max_time, latest(benchmark_score) as benchmark_score,
@@ -960,7 +961,7 @@
                     latest(scan_id) as scan_id
                     by benchmark_id
             | join type=left benchmark_id [
-                search `scap_index` target_host="$selected_host$" (result="*" OR benchmark_score="*" OR score="*") rule_id="*"
+                search `scap_index` host_name="$selected_host$" (result="*" OR benchmark_score="*" OR score="*") rule_id="*"
                 | stats earliest(lower(result)) as first_res, latest(lower(result)) as last_res by benchmark_id, rule_id
                 | eval is_reg=if(first_res=="pass" AND (last_res=="fail" OR last_res=="error"), 1, 0)
                 | stats sum(is_reg) as "Regressions" by benchmark_id
@@ -986,13 +987,13 @@
         <title>Failed Rules Overview (Severity: $selected_severity$)</title>
         <search base="base_sysadmin_eval">
           <query>
-            | search is_fail=1 cat_level="$selected_severity$" target_host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | search is_fail=1 cat_level="$selected_severity$" host_name="$selected_host$" benchmark_id="$selected_benchmark$"
             | eval result_details=coalesce(result_details, "No additional detail provided."),
                    scan_id=coalesce(scan_id, "N/A")
             | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
-            | table target_host, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
-            | sort target_host, benchmark_id, rule_id
-            | rename target_host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Failure Reason", scan_date as "Evaluated"
+            | table host_name, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
+            | sort host_name, benchmark_id, rule_id
+            | rename host_name as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Failure Reason", scan_date as "Evaluated"
           </query>
         </search>
         <option name="count">15</option>
@@ -1003,7 +1004,7 @@
         <title>Status Rules Overview (Filter: $selected_status$)</title>
         <search base="base_sysadmin_eval">
           <query>
-            | search target_host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | search host_name="$selected_host$" benchmark_id="$selected_benchmark$"
             | where ("$selected_status$"=="error" AND is_error==1) OR 
                     ("$selected_status$"=="not_checked" AND is_not_checked==1) OR
                     ("$selected_status$"=="informational" AND is_informational==1) OR
@@ -1011,9 +1012,9 @@
             | eval result_details=coalesce(result_details, "No additional detail provided."),
                    scan_id=coalesce(scan_id, "N/A")
             | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
-            | table target_host, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
-            | sort target_host, benchmark_id, rule_id
-            | rename target_host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Result Detail", scan_date as "Evaluated"
+            | table host_name, benchmark_id, rule_id, vuln_id, cci_id, title, result_details, scan_date
+            | sort host_name, benchmark_id, rule_id
+            | rename host_name as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", result_details as "Result Detail", scan_date as "Evaluated"
           </query>
         </search>
         <option name="count">15</option>
@@ -1024,7 +1025,7 @@
         <title>Failures for $selected_benchmark$ ($clicked_column$)</title>
         <search base="base_sysadmin_eval">
           <query>
-            | search is_fail=1 target_host="$selected_host$" benchmark_id="$selected_benchmark$"
+            | search is_fail=1 host_name="$selected_host$" benchmark_id="$selected_benchmark$"
             | eval raw_col="$clicked_column$"
             | eval target_cat=case(
                 match(raw_col, "^\\$") OR raw_col=="ALL" OR raw_col=="STIG Benchmark" OR raw_col=="Score (%)" OR raw_col=="Last Evaluated", "ALL",
@@ -1052,22 +1053,22 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` (result="*" OR benchmark_score="*" OR score="*") rule_id="*" target_host="$selected_host$" benchmark_id="$selected_benchmark$"
+              `scap_index` (result="*" OR benchmark_score="*" OR score="*") rule_id="*" host_name="$selected_host$" benchmark_id="$selected_benchmark$"
               | eval clean_res=lower(result), vuln_id=coalesce(nullif(vuln_id,""),"N/A"), cci_id=coalesce(nullif(cci_id,""),"N/A")
-              | sort 0 target_host, benchmark_id, rule_id, _time
-              | eventstats max(_time) as absolute_latest_time by target_host, benchmark_id, rule_id
-              | streamstats current=f window=1 last(clean_res) as prev_res, last(_time) as prev_time by target_host, benchmark_id, rule_id
+              | sort 0 host_name, benchmark_id, rule_id, _time
+              | eventstats max(_time) as absolute_latest_time by host_name, benchmark_id, rule_id
+              | streamstats current=f window=1 last(clean_res) as prev_res, last(_time) as prev_time by host_name, benchmark_id, rule_id
               | eval is_reg=if(prev_res=="pass" AND (clean_res=="fail" OR clean_res=="error"), 1, 0)
               | where is_reg=1
-              | stats latest(_time) as transition_time, latest(absolute_latest_time) as latest_time, latest(rule_title) as rule_title, latest(title) as title, latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(result_details) as result_details, latest(prev_res) as prev_res, latest(clean_res) as clean_res by target_host, benchmark_id, rule_id
+              | stats latest(_time) as transition_time, latest(absolute_latest_time) as latest_time, latest(rule_title) as rule_title, latest(title) as title, latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(result_details) as result_details, latest(prev_res) as prev_res, latest(clean_res) as clean_res by host_name, benchmark_id, rule_id
               | eval title=coalesce(nullif(rule_title, ""), nullif(title, ""), rule_id)
               | eval result_details=coalesce(result_details, "No additional detail provided."),
                      regression_date=strftime(transition_time, "%m/%d/%Y %H:%M"),
                      latest_scan_date=strftime(latest_time, "%m/%d/%Y %H:%M"),
                      transition=prev_res . " ➔ " . clean_res
-              | table target_host, benchmark_id, rule_id, vuln_id, cci_id, title, transition, result_details, regression_date, latest_scan_date
+              | table host_name, benchmark_id, rule_id, vuln_id, cci_id, title, transition, result_details, regression_date, latest_scan_date
               | sort - transition_time
-              | rename target_host as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", transition as "State Change", result_details as "Failure/Error Detail", regression_date as "Regression Date", latest_scan_date as "Latest Scan Date"
+              | rename host_name as "Host", benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title", transition as "State Change", result_details as "Failure/Error Detail", regression_date as "Regression Date", latest_scan_date as "Latest Scan Date"
             ]]>
           </query>
           <earliest>$time_tok.earliest$</earliest>
@@ -1082,19 +1083,19 @@
         <search base="base_sysadmin_eval">
           <query>
             | search is_fail=1 rule_id="$selected_rule_id$" benchmark_id="$selected_benchmark$"
-            | dedup target_host, benchmark_id, rule_id
-            | join type=left target_host, benchmark_id [
+            | dedup host_name, benchmark_id, rule_id
+            | join type=left host_name, benchmark_id [
                 search `scap_index` event_type="scan_summary"
-                | stats latest(primary_ip) as primary_ip, latest(ip) as ip, latest(target_os) as target_os, latest(host_id) as host_id, latest(scan_id) as scan_id by target_host, benchmark_id
+                | stats latest(primary_ip) as primary_ip, latest(ip) as ip, latest(target_os) as target_os, latest(host_id) as host_id, latest(scan_id) as scan_id by host_name, benchmark_id
                 | eval primary_ip=coalesce(primary_ip, ip, "N/A"), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A")
-                | fields target_host, host_id, scan_id, benchmark_id, primary_ip, target_os
+                | fields host_name, host_id, scan_id, benchmark_id, primary_ip, target_os
               ]
             | eval primary_ip=coalesce(primary_ip, "N/A"), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), host_id=coalesce(host_id, "N/A"), scan_id=coalesce(scan_id, "N/A")
             | eval result_details=coalesce(result_details, "No additional detail provided.")
             | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
-            | table target_host, primary_ip, target_os, vuln_id, cci_id, result_details, scan_date
-            | sort target_host
-            | rename target_host as "Host", primary_ip as "IP Address", target_os as "Operating System", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", result_details as "Failure Reason", scan_date as "Evaluated"
+            | table host_name, primary_ip, target_os, vuln_id, cci_id, result_details, scan_date
+            | sort host_name
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "Operating System", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", result_details as "Failure Reason", scan_date as "Evaluated"
           </query>
         </search>
         <option name="count">15</option>
@@ -1109,7 +1110,7 @@
       <chart>
         <search>
           <query>
-            `scap_index` target_host="$selected_host$" event_type="scan_summary" benchmark_score="*"
+            `scap_index` host_name="$selected_host$" event_type="scan_summary" benchmark_score="*"
             | timechart span=1d avg(benchmark_score) as "Mean Score (%)"
             | makecontinuous _time span=1d
             | eval "Mean Score (%)"=round('Mean Score (%)', 1)
@@ -1131,7 +1132,7 @@
       <chart>
         <search>
           <query>
-            `scap_index` target_host="$selected_host$" event_type="scan_summary" benchmark_score="*"
+            `scap_index` host_name="$selected_host$" event_type="scan_summary" benchmark_score="*"
             | timechart span=1d avg(benchmark_score) as avg_score by benchmark_id
             | makecontinuous _time span=1d
             | eval "Score (%)"=round(avg_score, 1)
@@ -1155,7 +1156,7 @@
           <query>
             `scap_index` event_type="scan_summary" benchmark_score="*"
             | eval profile_id=if(isnull(profile_id) OR profile_id=="", "Unknown", profile_id), target_os=if(isnull(target_os) OR target_os=="", "Unknown", target_os), benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id)
-            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") target_host="$host_search_tok$"
+            | search (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*") host_name="$host_search_tok$"
             | timechart span=1d avg(benchmark_score) as "Global Mean Score (%)"
             | makecontinuous _time span=1d
             | eval "Global Mean Score (%)"=round('Global Mean Score (%)', 1)

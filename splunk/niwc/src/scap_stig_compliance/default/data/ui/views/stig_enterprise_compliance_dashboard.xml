@@ -10,7 +10,7 @@
              target_os_version=if(isnull(target_os_version) OR target_os_version=="", "Unknown", target_os_version),
              target_os_family=if(isnull(target_os_family) OR target_os_family=="", "Unknown", target_os_family),
              primary_ip=coalesce(primary_ip, ip, "N/A"), 
-             host_id=coalesce(host_id, smbios_uuid, target_host, "N/A"),
+             host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
              scan_id=coalesce(scan_id, "N/A"),
              benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id),
              rules_informational=coalesce(rules_informational, rules_info, cat4_fails, 0)
@@ -32,7 +32,7 @@
               latest(target_os_family) as target_os_family,
               latest(host_id) as host_id,
               latest(scan_id) as scan_id,
-              latest(profile_id) as profile_id by target_host, benchmark_id
+              latest(profile_id) as profile_id by host_name, benchmark_id
     </query>
     <earliest>$time_tok.earliest$</earliest>
     <latest>$time_tok.latest$</latest>
@@ -102,7 +102,7 @@
         <title>Total Monitored Hosts</title>
         <search base="base_stig_eval">
           <query>
-            | stats dc(eval(if(host_id=="N/A", target_host, host_id))) as total_hosts
+            | stats dc(eval(if(host_id=="N/A", host_name, host_id))) as total_hosts
             | fields total_hosts
           </query>
         </search>
@@ -118,7 +118,7 @@
         <title>High Risk Systems (CAT I &gt; 0)</title>
         <search base="base_stig_eval">
           <query>
-            | stats dc(eval(if(cat1_fails &gt; 0, coalesce(nullif(host_id,"N/A"), target_host), null()))) as high_risk_hosts
+            | stats dc(eval(if(cat1_fails &gt; 0, coalesce(nullif(host_id,"N/A"), host_name), null()))) as high_risk_hosts
             | fields high_risk_hosts
           </query>
         </search>
@@ -176,7 +176,7 @@
         <title>Fleet Compliance SLA Distribution</title>
         <search base="base_stig_eval">
           <query>
-            | stats avg(score_clean) as host_score by target_host, host_id
+            | stats avg(score_clean) as host_score by host_name, host_id
             | eval Tier=case(
                 host_score &gt;= 90, "Compliant",
                 host_score &gt;= 80 AND host_score &lt; 90, "At Risk",
@@ -216,7 +216,7 @@
             <![CDATA[
               `scap_index` event_type="rule_result" cci_id="*"
               | eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"),
-                     host_id=coalesce(host_id, smbios_uuid, target_host, "N/A"),
+                     host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
                      scan_id=coalesce(scan_id, "N/A")
               | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
               | streamstats max(_time) as latest_scan_time by host_id, benchmark_id
@@ -252,7 +252,7 @@
                    benchmark_id=if(isnull(benchmark_id) OR benchmark_id=="", "Unknown", benchmark_id)
             | search (profile_id="$mac_tok$" OR "$mac_tok$"="*") (target_os="$os_tok$" OR "$os_tok$"="*") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
             | bin _time span=1d
-            | stats latest(benchmark_score) as daily_score by _time, target_host, benchmark_id
+            | stats latest(benchmark_score) as daily_score by _time, host_name, benchmark_id
             | timechart span=1d avg(daily_score) as raw_avg
             | trendline sma7(raw_avg) as sma_temp
             | eval "Daily Avg Compliance (%)"=if(isnotnull(raw_avg) AND raw_avg &gt; 0, round(raw_avg, 1), null())
@@ -279,7 +279,7 @@
         <title>Operating System Risk Summary</title>
         <search base="base_stig_eval">
           <query>
-            | stats latest(target_os) as os_name, latest(target_os_version) as os_version, avg(score_clean) as mean_score, sum(cat1_fails) as cat1 by target_host, host_id
+            | stats latest(target_os) as os_name, latest(target_os_version) as os_version, avg(score_clean) as mean_score, sum(cat1_fails) as cat1 by host_name, host_id
             | stats count as host_count, sum(cat1) as total_cat1, avg(mean_score) as avg_score by os_name, os_version
             | eval "Mean Score (%)"=round(avg_score, 1)
             | fields os_name, os_version, host_count, total_cat1, "Mean Score (%)"
@@ -300,7 +300,7 @@
         <search base="base_stig_eval">
           <query>
             | stats avg(score_clean) as avg_score,
-                    dc(eval(if(host_id=="N/A", target_host, host_id))) as "Hosts Evaluated",
+                    dc(eval(if(host_id=="N/A", host_name, host_id))) as "Hosts Evaluated",
                     sum(cat1_fails) as "CAT I Fails",
                     sum(cat2_fails) as "CAT II Fails",
                     sum(cat3_fails) as "CAT III Fails",
@@ -342,9 +342,9 @@
             | eval target_bench=trim(coalesce("$selected_benchmark$", "*"))
             | where benchmark_id==target_bench OR target_bench=="*"
             | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
-            | fields target_host, primary_ip, target_os, target_os_version, score_clean, cat1_fails, cat2_fails, cat3_fails, rules_informational, scan_date
+            | fields host_name, primary_ip, target_os, target_os_version, score_clean, cat1_fails, cat2_fails, cat3_fails, rules_informational, scan_date
             | sort score_clean
-            | rename target_host as "Host", primary_ip as "IP Address", target_os as "OS", target_os_version as "OS Version", score_clean as "Score (%)", cat1_fails as "CAT I Fails", cat2_fails as "CAT II Fails", cat3_fails as "CAT III Fails", rules_informational as "CAT IV Fails", scan_date as "Evaluated"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "OS", target_os_version as "OS Version", score_clean as "Score (%)", cat1_fails as "CAT I Fails", cat2_fails as "CAT II Fails", cat3_fails as "CAT III Fails", rules_informational as "CAT IV Fails", scan_date as "Evaluated"
           </query>
         </search>
         <option name="count">10</option>
@@ -364,12 +364,12 @@
                     sum(rules_informational) as cat4,
                     latest(primary_ip) as primary_ip, 
                     latest(target_os_version) as target_os_version,
-                    latest(max_time) as last_eval by target_host, host_id
+                    latest(max_time) as last_eval by host_name, host_id
             | eval "Mean Score (%)"=round(avg_score, 1), 
                    scan_date=strftime(last_eval, "%m/%d/%Y %H:%M")
-            | fields target_host, primary_ip, target_os_version, "Mean Score (%)", cat1, cat2, cat3, cat4, scan_date
+            | fields host_name, primary_ip, target_os_version, "Mean Score (%)", cat1, cat2, cat3, cat4, scan_date
             | sort "Mean Score (%)", - cat1
-            | rename target_host as "Host", primary_ip as "IP Address", target_os_version as "OS Version", cat1 as "CAT I Fails", cat2 as "CAT II Fails", cat3_fails as "CAT III Fails", cat4 as "CAT IV Fails", scan_date as "Last Evaluated"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os_version as "OS Version", cat1 as "CAT I Fails", cat2 as "CAT II Fails", cat3_fails as "CAT III Fails", cat4 as "CAT IV Fails", scan_date as "Last Evaluated"
           </query>
         </search>
         <option name="count">10</option>

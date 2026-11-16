@@ -1,33 +1,33 @@
-# SCAP & STIG Compliance v0.2.0 — source/file change register
+# SCAP & STIG Compliance — v0.2.0 revised field-contract release
 
-**Baseline:** uploaded `SIEM_Dashboards-main.zip` version 0.1.0. **Scope:** Splunk NIWC app; Elastic placeholder and repository overview preserved.
+**Base:** earlier `SIEM_Dashboards-0.2.0.zip` from 2026-11-16. The app version remains **0.2.0** as requested; this bundle supersedes the earlier package of that same version. For production release management, a unique patch version/build identifier is advisable.
 
-## Modified existing files (relative to repository root)
+## Modified source files versus earlier v0.2.0
 
-- `splunk/niwc/src/scap_stig_compliance/default/app.conf` — `[launcher] version = 0.2.0`.
-- `splunk/niwc/src/scap_stig_compliance/default/props.conf` — remove `INDEXED_EXTRACTIONS=json`, `KV_MODE=none` and `AUTO_KV_JSON=true`; set `KV_MODE=json`; add search-time `EVAL-target_host` with fallback to JSON payload `host` and `assessed_host`.
-- `splunk/niwc/src/scap_stig_compliance/default/data/ui/views/stig_enterprise_compliance_dashboard.xml` — replace payload-host field references with `target_host`.
-- `splunk/niwc/src/scap_stig_compliance/default/data/ui/views/sysadmin_stig_dashboard.xml` — replace payload-host field references with `target_host`.
-- `splunk/niwc/src/scap_stig_compliance/metadata/default.meta` — remove unused data-model permission stanzas.
-- `splunk/niwc/readme.md` — update version and setup/qualification pointers.
+- `src/scap_stig_compliance/default/props.conf` — new `EVAL-host_name`, `EVAL-scanner_name`, `EVAL-scanner_version`; retains `KV_MODE=json`; normalized host fallback order: host_name → target_host → assessed_host → legacy raw host; scanner version falls back to legacy `scc_version` and scanner name to SCC **only** when `scc_version` is present. No modification of Splunk's native host metadata.
+- `src/scap_stig_compliance/default/data/ui/views/stig_enterprise_compliance_dashboard.xml` — replace query references to `target_host` with `host_name`, maintaining displayed Host labeling and existing search logic.
+- `src/scap_stig_compliance/default/data/ui/views/sysadmin_stig_dashboard.xml` — replace `target_host` with `host_name`, replace `scc_version` with `scanner_version` and add `scanner_name` in the host summary's extraction/aggregation/display; table columns now `Scanner` and `Scanner Version` rather than `SCC Version`. Update dashboard description to producer neutral.
+- `src/scap_stig_compliance/default/app.conf` — producer-neutral description (version remains 0.2.0).
+- `INSTALL.md`, `readme.md`, repository `README.md` — field contract, migration and index override documentation.
+- `build/scap_stig_compliance-0.2.0.spl` — rebuilt tar.gz from the modified 16-file source application; no `candidate` suffix.
 
-## Deleted existing files
+## Documentation changed / removed / added
 
-- `splunk/niwc/src/scap_stig_compliance/default/datamodels.conf` — data-model acceleration was unused.
-- `splunk/niwc/src/scap_stig_compliance/default/data/models/SCAP_Compliance_Executive_Summary.json` — unused and hard-coded the `scap-scc` index.
-- `splunk/niwc/build/scap_stig_compliance-0.1.0.spl` — superseded compiled package.
+- Removed outdated `docs/SCC_Splunk_Guide.pdf`, which referenced the old 0.1.x app behavior.
+- Added updated `docs/SCAP_STIG_Splunk_Dashboard_Guide_v0.2.0.docx` and `.pdf` (producer-neutral).
+- Added updated `docs/SCC_5.16_Splunk_Integration_Companion_v0.2.0.docx` and `.pdf` (SCC-specific).
+- Added `tests/test_contract.py` and `tests/fixtures/new_and_legacy_events.jsonl` for static migration checks.
 
-## Added files
+## Preserved / not changed
 
-- `splunk/niwc/build/scap_stig_compliance-0.2.0.spl` — new installable TAR.GZ package regenerated from the source directory.
-- `splunk/niwc/INSTALL.md` — index override, ingestion, metadata/host semantics, and validation instructions.
-- `splunk/niwc/CHANGELOG-0.2.0.md` — this change register.
+- `src/scap_stig_compliance/default/macros.conf` still defines `scap_index` as `index="scap-scc"`. Customers override it in **`$SPLUNK_HOME/etc/apps/scap_stig_compliance/local/macros.conf`**, not by editing `default/` or dashboard XML. SCC/HEC/monitor input destination configuration is separate.
+- Remaining JS, CSS, icons, nav and meta settings, and Elastic placeholder are unchanged.
+- Deleted data-model acceleration and model file from earlier v0.2.0 remain deleted.
 
-## Unchanged
+## Limitations
 
-- `splunk/niwc/src/scap_stig_compliance/default/macros.conf` — intentionally retains the overridable default `[scap_index]` macro (`index="scap-scc"`).
-- Remaining JavaScript, CSS, assets, navigation, source license, guide PDF and Elastic placeholder unchanged.
-
-## Outstanding
-
-The SCC producer must be updated separately to output `target_host` instead of payload `host`. This release includes a backward-compatible dashboard fallback but cannot remove the metadata collision from legacy records. Zero-score history, latest-scan CCI and regression search behavior were **not** fixed or verified in live Splunk. SCC GUI index configuration does not propagate into a separately deployed Splunk app.
+- These are **field-contract updates**, not fixes for pre-existing history/CCI/latest-scan/zero-score/regression defects.
+- Source/package and JSON structure were validated statically. No live Splunk, AppInspect, or runtime/dashboard rendering test was performed.
+- SCC must independently implement producer-side output of `host_name`, `scanner_name`, `scanner_version` on every event. The supplied manually edited SCC sample only showed `target_host`; it did not establish exporter support.
+- Repeated imports of the same `scan_id` are not automatically deduplicated.
+- New producer-side field names constitute a reporting contract change; a separately ratified schema version is recommended. Illustrative 2.0.0 events in the guides are *examples*, not proof SCC 5.16 emits that schema.
