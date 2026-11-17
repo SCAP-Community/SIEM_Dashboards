@@ -253,11 +253,22 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result" host_name="$host_search_tok$"
-              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
-              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
-              | stats dc(rule_id) as unique_cat1_rules
-              | fields unique_cat1_rules
+			`scap_index` (event_type="scan_summary" OR event_type="rule_result")
+			| eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
+			| where isnotnull(scan_id)
+			| eventstats values(target_os) as scan_os by scan_id
+			| search (scan_os="$os_tok$" OR "$os_tok$"="*")
+					 (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+					 host_name="$host_search_tok$"
+			| where event_type="rule_result"
+			| eval clean_res=lower(result),
+				   clean_sev=lower(severity),
+				   test_type=coalesce(test_type,"Unknown")
+			| search (test_type="$test_tok$" OR "$test_tok$"="*")
+					 (clean_res="fail" OR clean_res="error")
+					 (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high")
+			| stats dc(rule_id) as unique_cat1_rules
+			| fields unique_cat1_rules
             ]]>
           </query>
           <earliest>$time_tok.earliest$</earliest>
@@ -909,14 +920,35 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result" host_name="$host_search_tok$"
-              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"), vuln_id=coalesce(nullif(vuln_id,""),"N/A"), cci_id=coalesce(nullif(cci_id,""),"N/A")
-              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
-              | stats dc(host_name) as "Affected Hosts", latest(vuln_id) as vuln_id, latest(cci_id) as cci_id, latest(rule_title) as title by benchmark_id, rule_id
-              | eval title=coalesce(nullif(title, ""), rule_id)
-              | sort benchmark_id, rule_id
-              | table benchmark_id, rule_id, vuln_id, cci_id, title, "Affected Hosts"
-              | rename benchmark_id as "STIG Benchmark", rule_id as "Rule ID", vuln_id as "Vuln ID (V-ID)", cci_id as "CCI", title as "Vulnerability Title"
+			`scap_index` (event_type="scan_summary" OR event_type="rule_result")
+			| eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
+			| where isnotnull(scan_id)
+			| eventstats values(target_os) as scan_os by scan_id
+			| search (scan_os="$os_tok$" OR "$os_tok$"="*")
+					 (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+					 host_name="$host_search_tok$"
+			| where event_type="rule_result"
+			| eval clean_res=lower(result),
+				   clean_sev=lower(severity),
+				   test_type=coalesce(test_type,"Unknown"),
+				   vuln_id=coalesce(nullif(vuln_id,""),"N/A"),
+				   cci_id=coalesce(nullif(cci_id,""),"N/A")
+			| search (test_type="$test_tok$" OR "$test_tok$"="*")
+					 (clean_res="fail" OR clean_res="error")
+					 (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high")
+			| stats dc(host_name) as "Affected Hosts",
+					latest(vuln_id) as vuln_id,
+					latest(cci_id) as cci_id,
+					latest(rule_title) as title
+					by benchmark_id, rule_id
+			| eval title=coalesce(nullif(title,""),rule_id)
+			| sort benchmark_id, rule_id
+			| table benchmark_id, rule_id, vuln_id, cci_id, title, "Affected Hosts"
+			| rename benchmark_id as "STIG Benchmark",
+					 rule_id as "Rule ID",
+					 vuln_id as "Vuln ID (V-ID)",
+					 cci_id as "CCI",
+					 title as "Vulnerability Title"
             ]]>
           </query>
           <earliest>$time_tok.earliest$</earliest>
