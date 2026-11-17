@@ -135,11 +135,22 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result"
-              | eval clean_res=lower(result), clean_sev=lower(severity), benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
-              | search (clean_res="fail" OR clean_res="error") (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high") (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
-              | stats dc(rule_id) as unique_cat1_rules
-              | fields unique_cat1_rules
+				`scap_index` (event_type="scan_summary" OR event_type="rule_result")
+				| eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown")
+				| where isnotnull(scan_id)
+				| eventstats values(target_os) as scan_os
+							 values(profile_id) as scan_profile
+							 by scan_id
+				| search (scan_os="$os_tok$" OR "$os_tok$"="*")
+						 (scan_profile="$mac_tok$" OR "$mac_tok$"="*")
+						 (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+				| where event_type="rule_result"
+				| eval clean_res=lower(result),
+					   clean_sev=lower(severity)
+				| search (clean_res="fail" OR clean_res="error")
+						 (clean_sev="cat1" OR clean_sev="cat i" OR clean_sev="high")
+				| stats dc(rule_id) as unique_cat1_rules
+				| fields unique_cat1_rules
             ]]>
           </query>
           <earliest>$time_tok.earliest$</earliest>
@@ -214,19 +225,30 @@
         <search>
           <query>
             <![CDATA[
-              `scap_index` event_type="rule_result" cci_id="*"
-              | eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"),
-                     host_id=coalesce(host_id, smbios_uuid, host_name, "N/A"),
-                     scan_id=coalesce(scan_id, "N/A")
-              | search (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
-              | streamstats max(_time) as latest_scan_time by host_id, benchmark_id
-              | where _time == latest_scan_time
-              | eval clean_res=lower(result)
-              | search (clean_res="fail" OR clean_res="error")
-              | stats count as fail_count, dc(host_id) as affected_hosts by cci_id
-              | sort - fail_count
-              | head 10
-              | rename cci_id as "Control Identifier (CCI)", fail_count as "Failure Count"
+			`scap_index` (event_type="scan_summary" OR event_type="rule_result")
+			| eval benchmark_id=coalesce(benchmark_id, ruleset, "Unknown"),
+				   host_id=coalesce(host_id, smbios_uuid, host_name, "N/A")
+			| where isnotnull(scan_id) AND scan_id!=""
+			| eventstats values(target_os) as scan_os
+						 values(profile_id) as scan_profile
+						 by scan_id
+			| search (scan_os="$os_tok$" OR "$os_tok$"="*")
+					 (scan_profile="$mac_tok$" OR "$mac_tok$"="*")
+					 (benchmark_id="$bench_tok$" OR "$bench_tok$"="*")
+			| where event_type="rule_result"
+			| eventstats max(_time) as latest_scan_time
+						 by host_id, benchmark_id
+			| where _time=latest_scan_time
+			| where isnotnull(cci_id) AND cci_id!=""
+			| eval clean_res=lower(result)
+			| where clean_res="fail" OR clean_res="error"
+			| stats count as fail_count,
+					dc(host_id) as affected_hosts
+					by cci_id
+			| sort - fail_count
+			| head 10
+			| rename cci_id as "Control Identifier (CCI)",
+					 fail_count as "Failure Count"
             ]]>
           </query>
           <earliest>$time_tok.earliest$</earliest>
