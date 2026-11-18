@@ -366,7 +366,7 @@
             | eval scan_date=strftime(max_time, "%m/%d/%Y %H:%M")
             | fields host_name, primary_ip, target_os, target_os_version, score_clean, cat1_fails, cat2_fails, cat3_fails, rules_informational, scan_date
             | sort score_clean
-            | rename host_name as "Host", primary_ip as "IP Address", target_os as "OS", target_os_version as "OS Version", score_clean as "Score (%)", cat1_fails as "CAT I Fails", cat2_fails as "CAT II Fails", cat3_fails as "CAT III Fails", rules_informational as "CAT IV Fails", scan_date as "Evaluated"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os as "OS", target_os_version as "OS Version", score_clean as "Score (%)", cat1_fails as "CAT I Fails", cat2_fails as "CAT II Fails", cat3_fails as "CAT III Fails", rules_informational as "Informational", scan_date as "Evaluated"
           </query>
         </search>
         <option name="count">10</option>
@@ -383,15 +383,15 @@
                     sum(cat1_fails) as cat1, 
                     sum(cat2_fails) as cat2, 
                     sum(cat3_fails) as cat3, 
-                    sum(rules_informational) as cat4,
+                    sum(rules_informational) as informational,
                     latest(primary_ip) as primary_ip, 
                     latest(target_os_version) as target_os_version,
                     latest(max_time) as last_eval by host_name, host_id
             | eval "Mean Score (%)"=round(avg_score, 1), 
                    scan_date=strftime(last_eval, "%m/%d/%Y %H:%M")
-            | fields host_name, primary_ip, target_os_version, "Mean Score (%)", cat1, cat2, cat3, cat4, scan_date
+            | fields host_name, primary_ip, target_os_version, "Mean Score (%)", cat1, cat2, cat3, informational, scan_date
             | sort "Mean Score (%)", - cat1
-            | rename host_name as "Host", primary_ip as "IP Address", target_os_version as "OS Version", cat1 as "CAT I Fails", cat2 as "CAT II Fails", cat3_fails as "CAT III Fails", cat4 as "CAT IV Fails", scan_date as "Last Evaluated"
+            | rename host_name as "Host", primary_ip as "IP Address", target_os_version as "OS Version", cat1 as "CAT I Fails", cat2 as "CAT II Fails", cat3 as "CAT III Fails", informational as "Informational", scan_date as "Last Evaluated"
           </query>
         </search>
         <option name="count">10</option>

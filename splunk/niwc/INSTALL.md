@@ -1,8 +1,8 @@
-# SCAP & STIG Compliance Splunk App v0.2.0 — installation
+# SCAP & STIG Compliance Splunk App v0.2.2 — installation
 
 ## Install and select an index
 
-Install `build/scap_stig_compliance-0.2.0.spl` on a Splunk search head or deploy it through the appropriate search-head cluster process. The installed app directory is `scap_stig_compliance`.
+Install `build/scap_stig_compliance-0.2.2.spl` on a Splunk search head or deploy it through the appropriate search-head cluster process. The installed app directory is `scap_stig_compliance`.
 
 The distributed `default/macros.conf` contains:
 
@@ -56,4 +56,4 @@ Configure `sourcetype=scap:json`, event boundaries, `_time` mapping from UNIX-se
 
 Structural checks and sample-data validation are not live Splunk qualification. The existing zero-score trend, latest-scan CCI selection, and multi-scan regression issues have not been corrected by these field-name changes. Full installation and AppInspect/btool/runtime verification are still required.
 
-See the producer-neutral dashboard guide in `docs/` and `CHANGELOG-0.2.0.md` for the file change register. SCC-specific configuration guides are distributed with SCC.
+See the producer-neutral dashboard guide in `docs/` and `CHANGELOG-0.2.1.md` for the file change register. SCC-specific configuration guides are distributed with SCC.

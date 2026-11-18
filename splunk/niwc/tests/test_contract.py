@@ -29,7 +29,7 @@ class ContractChecks(unittest.TestCase):
         self.assertIn('scanner_name as "Scanner Name"', src)
         self.assertIn('scanner_version as "Scanner Version"', src)
         conf = (SRC/'default/app.conf').read_text()
-        self.assertIn('version = 0.2.1', conf)
+        self.assertIn('version = 0.2.2', conf)
         self.assertIn('author = NIWC Atlantic', conf)
         self.assertIn('description = Dashboards for monitoring SCAP and STIG compliance results from compatible assessment scanners.', conf)
     def test_no_old_scc_column_name(self):

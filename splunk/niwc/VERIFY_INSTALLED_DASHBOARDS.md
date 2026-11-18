@@ -1,10 +1,10 @@
-# Verify the installed SCAP & STIG Compliance app v0.2.0
+# Verify the installed SCAP & STIG Compliance app v0.2.1
 
 The updated Sysadmin dashboard contains an **Enterprise Host Compliance Summary** table with columns **Scanner Name** and **Scanner Version**. There is no **SCC Version** column in either dashboard shipped by this repository.
 
 ## Confirm installation and app namespace
 
-1. Install `build/scap_stig_compliance-0.2.0.spl` using Splunk Web **Apps > Manage Apps > Install app from file**, selecting upgrade of the existing `scap_stig_compliance` application when prompted.
+1. Install `build/scap_stig_compliance-0.2.1.spl` using Splunk Web **Apps > Manage Apps > Install app from file**, selecting upgrade of the existing `scap_stig_compliance` application when prompted.
 2. Open the **System STIG Compliance Dashboard** from the **SCAP & STIG Compliance** app, not a cloned or user-saved dashboard with a similar title.
 3. Check for dashboard overrides in the corresponding `local` or user configuration directories. A saved dashboard can take precedence over the app's `default/data/ui/views/*.xml` source.
 4. In a search-head cluster, use the established deployer/bundle procedure. Refresh the app/dashboard browser view after deployment; restart/reload services as required by the environment.
